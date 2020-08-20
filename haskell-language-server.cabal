@@ -43,6 +43,7 @@ library
       Ide.Plugin
       Ide.Plugin.Config
       Ide.Plugin.Eval
+      Ide.Plugin.TH
       Ide.Plugin.Example
       Ide.Plugin.Example2
       Ide.Plugin.Fourmolu

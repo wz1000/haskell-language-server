@@ -77,6 +77,7 @@ import Ide.Plugin.Retrie                  as Retrie
 import Ide.Plugin.Brittany                as Brittany
 #endif
 import Ide.Plugin.Pragmas                 as Pragmas
+import Ide.Plugin.TH                      as TH
 
 
 -- ---------------------------------------------------------------------
@@ -116,6 +117,7 @@ idePlugins includeExamples = pluginDescToIdePlugins allPlugins
 #endif
       , Eval.descriptor "eval"
       , ImportLens.descriptor "importLens"
+      , TH.descriptor "th"
       ]
     examplePlugins =
       [Example.descriptor  "eg"
