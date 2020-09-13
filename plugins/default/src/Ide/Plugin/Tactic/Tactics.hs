@@ -25,8 +25,13 @@ import           Name
 import           Refinery.Tactic
 import           TcType
 import           TyCoRep
-import           Type
+import           Type hiding (Var)
 
+
+------------------------------------------------------------------------------
+-- | Like 'var', but works over standard GHC 'OccName's.
+var' :: Var a => OccName -> a
+var' = var . fromString . occNameString
 
 ------------------------------------------------------------------------------
 -- | Like 'bvar', but works over standard GHC 'OccName's.
@@ -39,7 +44,7 @@ bvar' = bvar . fromString . occNameString
 assumption :: TacticsM ()
 assumption = rule $ \(Judgement hy g) ->
   case find ((== g) . snd) $ toList hy of
-    Just (v, _) -> pure $ noLoc $ HsVar NoExt $ noLoc $ Unqual v
+    Just (v, _) -> pure $ noLoc $ var' v
     Nothing -> throwError $ GoalMismatch "assumption" g
 
 
@@ -81,7 +86,7 @@ destruct' f term = rule $ \(Judgement hy g) -> do
         Nothing -> throwError $ GoalMismatch "destruct" g
         Just (tc, apps) -> do
           fmap noLoc
-              $ case' (HsVar NoExt $ noLoc $ Unqual term)
+              $ case' (var' term)
               <$> do
             for (tyConDataCons tc) $ \dc -> do
               let args = dataConInstArgTys dc apps
@@ -125,7 +130,7 @@ apply = rule $ \(Judgement hy g) -> do
       let (args, _) = splitFunTys ty
       sgs <- traverse (newSubgoal hy . CType) args
       pure . noLoc
-           . foldl' (@@) (HsVar NoExt $ noLoc $ Unqual func)
+           . foldl' (@@) (var' func)
            $ fmap unLoc sgs
     Nothing -> throwError $ GoalMismatch "apply" g
 

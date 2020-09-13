@@ -38,7 +38,7 @@ import           TysWiredIn (listTyCon, pairTyCon, intTyCon, floatTyCon, doubleT
 ------------------------------------------------------------------------------
 -- | Orphan instance for producing holes when attempting to solve tactics.
 instance MonadExtract (LHsExpr GhcPs) ProvableM where
-  hole = pure $ noLoc $ HsVar NoExt $ noLoc $ Unqual $ mkVarOcc "_"
+  hole = pure $ noLoc $ HsVar noExt $ noLoc $ Unqual $ mkVarOcc "_"
 
 
 ------------------------------------------------------------------------------
@@ -239,7 +239,7 @@ buildDataCon hy dc apps = do
   pure
     . noLoc
     . foldl' (@@)
-        (HsVar NoExt $ noLoc $ Unqual $ nameOccName $ dataConName dc)
+        (HsVar noExt $ noLoc $ Unqual $ nameOccName $ dataConName dc)
     $ fmap unLoc sgs
 
 

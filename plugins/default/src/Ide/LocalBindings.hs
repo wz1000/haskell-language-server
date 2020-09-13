@@ -21,7 +21,7 @@ import           Data.Maybe
 import           Data.Ord
 import           Data.Set (Set)
 import qualified Data.Set as S
-import           Development.IDE.GHC.Compat (TypecheckedModule (..), GhcTc, NoExt (..), RefMap, identType)
+import           Development.IDE.GHC.Compat (TypecheckedModule (..), GhcTc, noExt, RefMap, identType)
 import           HsBinds
 import           HsExpr
 import           Id
@@ -208,7 +208,7 @@ holify (Bindings _ local) v@(L span (HsVar _ (L _ var))) =
           -- Make sure the binding is not in scope and that it begins with an
           -- underscore
           case not (S.member var binds) && take 1 (occNameString occ) == "_" of
-            True  -> L span $ HsUnboundVar NoExt $ TrueExprHole occ
+            True  -> L span $ HsUnboundVar noExt $ TrueExprHole occ
             False -> v
 holify _ v = v
 
