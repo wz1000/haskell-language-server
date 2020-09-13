@@ -52,8 +52,6 @@ extra-deps:
 - stylish-haskell-0.11.0.3
 - temporary-1.2.1.1
 - these-1.1.1.1
-- primitive-0.7.1.0
-- refinery-0.1.0.0
 
 flags:
   haskell-language-server:
