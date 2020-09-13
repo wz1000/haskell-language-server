@@ -23,7 +23,7 @@ import           Data.Maybe
 import qualified Data.Text as T
 import           Data.Traversable
 import           Development.IDE.Core.PositionMapping
-import           Development.IDE.Core.RuleTypes (TcModuleResult (tmrModule), TypeCheck (..), GhcSession(..))
+import           Development.IDE.Core.RuleTypes (TcModuleResult (tmrModule), TypeCheck (..), GhcSession(..), GetHieAst (..), refMap)
 import           Development.IDE.Core.Service (runAction)
 import           Development.IDE.Core.Shake (useWithStale, IdeState (..))
 import           Development.IDE.GHC.Compat
@@ -245,11 +245,18 @@ judgmentForHole state nfp range = runMaybeT $ do
 
   (mss@(L span' (HsVar _ (L _ v))))
     <- liftMaybe $ mostSpecificSpan @_ @GhcTc span (tm_typechecked_source mod)
+  rss <-
+    liftMaybe $ case span' of
+      RealSrcSpan rss -> Just rss
+      _               -> Nothing
+
+  (har, _) <- MaybeT $ runIde state $ useWithStale GetHieAst nfp
+  let refs = refMap har
+      binds2 = bindings refs
 
   let goal = varType v
-      binds = bindings mod
-      hyps = hypothesisFromBindings span' binds
-  pure (pos, holify binds mss, Judgement hyps $ CType goal)
+      hyps = hypothesisFromBindings rss binds2
+  pure (pos, holify binds2 mss, Judgement hyps $ CType goal)
 
 
 tacticCmd :: (OccName -> TacticsM ()) -> CommandFunction TacticParams

@@ -115,6 +115,7 @@ executable haskell-language-server
     , bytestring
     , containers
     , deepseq
+    , fingertree
     , floskell                 ^>=0.10
     , fourmolu                 ^>=0.1
     , ghc

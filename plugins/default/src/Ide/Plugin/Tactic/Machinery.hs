@@ -15,7 +15,6 @@ import           Data.Function
 import           Data.List
 import           Data.Map (Map)
 import qualified Data.Map as M
-import           Data.Maybe
 import           Data.Set (Set)
 import qualified Data.Set as S
 import           Data.Traversable
@@ -54,10 +53,8 @@ instance Ord CType where
 
 ------------------------------------------------------------------------------
 -- | Given a 'SrcSpan' and a 'Bindings', create a hypothesis.
-hypothesisFromBindings :: SrcSpan -> Bindings -> Map OccName CType
-hypothesisFromBindings span (Bindings global local) =
-  buildHypothesis global
-    <> buildHypothesis (fromMaybe mempty $ M.lookup span local)
+hypothesisFromBindings :: RealSrcSpan -> Bindings -> Map OccName CType
+hypothesisFromBindings span bs = buildHypothesis (getLocalScope bs span)
 
 
 ------------------------------------------------------------------------------
