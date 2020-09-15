@@ -21,7 +21,7 @@ import           Data.Maybe
 import           Data.Ord
 import           Data.Set (Set)
 import qualified Data.Set as S
-import           Development.IDE.GHC.Compat (GhcTc, RefMap, identType, noExt)
+import           Development.IDE.GHC.Compat (GhcTc, RefMap, identType, identInfo, noExt, getScopeFromContext, Scope(..))
 import           HsExpr
 import           Id
 import           OccName
@@ -41,11 +41,21 @@ realSrcSpanToInterval rss =
 -- 'getLocalScope' to find the results.
 bindings :: RefMap -> Bindings
 bindings refmap = Bindings $ foldr (uncurry IM.insert) mempty  $ do
-  (ident, refs) <- M.toList refmap
-  Right name <- pure ident
+  (ident, refs)      <- M.toList refmap
+  Right name         <- pure ident
   (ref_span, ident_details) <- refs
-  Just ty <- pure $ identType ident_details
-  pure ( realSrcSpanToInterval ref_span
+  Just ty     <- pure $ identType ident_details
+  info        <- S.toList $ identInfo ident_details
+  Just scopes <- pure $ getScopeFromContext info
+  scope <- scopes >>= \case
+    ModuleScope -> pure $
+      let file = srcSpanFile ref_span
+       in Interval
+            (mkRealSrcLoc file minBound minBound)
+            (mkRealSrcLoc file maxBound maxBound)
+    LocalScope scope -> pure $ realSrcSpanToInterval scope
+    NoScope -> []
+  pure ( scope
        , S.singleton $ mkVanillaGlobal name ty
        )
 

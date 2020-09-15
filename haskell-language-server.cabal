@@ -222,6 +222,7 @@ test-suite func-test
   build-depends:
     , bytestring
     , data-default
+    , fingertree
     , lens
     , ghc
     , ghc-source-gen
