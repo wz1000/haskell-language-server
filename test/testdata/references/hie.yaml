@@ -1,0 +1,10 @@
+cradle:
+  cabal:
+    - path: "dependencyfoo/src"
+      component: "lib:dependencyfoo"
+
+    - path: "src"
+      component: "lib:references"
+
+    - path: "exe/Main.hs"
+      component: "references:exe:references"
