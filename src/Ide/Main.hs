@@ -34,7 +34,7 @@ import Development.IDE.Core.Shake
 import Development.IDE.LSP.LanguageServer
 import Development.IDE.LSP.Protocol
 import Development.IDE.Plugin
-import Development.IDE.Session (loadSession, findCradle, defaultLoadingOptions)
+import Development.IDE.Session (loadSession, findCradle, defaultLoadingOptions, cacheDir)
 import Development.IDE.Types.Diagnostics
 import Development.IDE.Types.Location
 import Development.IDE.Types.Logger
@@ -55,6 +55,16 @@ import System.IO
 import qualified System.Log.Logger as L
 import System.Time.Extra
 import Development.Shake (action)
+
+import HieDb.Create
+import HieDb.Types
+import Database.SQLite.Simple
+import qualified Data.ByteString.Char8 as B
+import qualified Crypto.Hash.SHA1 as H
+import Control.Concurrent.Async
+import Control.Exception
+import System.Directory
+import Data.ByteString.Base16
 
 -- ---------------------------------------------------------------------
 -- ghcide partialhandlers
@@ -91,8 +101,35 @@ defaultMain args idePlugins = do
             hPutStrLn stderr hlsVer
             runLspMode lspArgs idePlugins
 
+getHieDbLoc :: FilePath -> IO FilePath
+getHieDbLoc dir = do
+  let db = dirHash++"-"++takeBaseName dir++"-"++VERSION_ghc <.> "hiedb"
+      dirHash = B.unpack $ encode $ H.hash $ B.pack dir
+  cDir <- IO.getXdgDirectory IO.XdgCache cacheDir
+  createDirectoryIfMissing True cDir
+  pure (cDir </> db)
+
 runLspMode :: LspArguments -> IdePlugins -> IO ()
-runLspMode lspArgs@LspArguments{..} idePlugins = do
+runLspMode lspArgs idePlugins = do
+    dir <- IO.getCurrentDirectory
+    dbLoc <- getHieDbLoc dir
+    runWithDb dbLoc $ runLspMode' lspArgs idePlugins
+
+runWithDb :: FilePath -> (HieDb -> HieWriterChan -> IO ()) -> IO ()
+runWithDb fp k =
+  withHieDb fp $ \writedb -> do
+    execute_ (getConn writedb) "PRAGMA journal_mode=WAL;"
+    initConn writedb
+    chan <- newChan
+    race_ (writerThread writedb chan) (withHieDb fp (flip k chan))
+  where
+    writerThread db chan = forever $ do
+      k <- readChan chan
+      k db `catch` \e@SQLError{} -> do
+        hPutStrLn stderr $ "Error in worker, ignoring: " ++ show e
+
+runLspMode' :: LspArguments -> IdePlugins -> HieDb -> HieWriterChan -> IO ()
+runLspMode' lspArgs@LspArguments{..} idePlugins hiedb hiechan = do
     LSP.setupLogger argsLogFile ["hls", "hie-bios"]
       $ if argsDebugOn then L.DEBUG else L.INFO
 
@@ -139,6 +176,7 @@ runLspMode lspArgs@LspArguments{..} idePlugins = do
             debouncer <- newAsyncDebouncer
             initialise caps (mainRule >> pluginRules plugins >> action kick)
                 getLspId event wProg wIndefProg hlsLogger debouncer options vfs
+                hiedb hiechan
     else do
         -- GHC produces messages with UTF8 in them, so make sure the terminal doesn't error
         hSetEncoding stdout utf8
@@ -167,7 +205,7 @@ runLspMode lspArgs@LspArguments{..} idePlugins = do
         debouncer <- newAsyncDebouncer
         let dummyWithProg _ _ f = f (const (pure ()))
         sessionLoader <- loadSession dir
-        ide <- initialise def mainRule (pure $ IdInt 0) (showEvent lock) dummyWithProg (const (const id)) (logger Info)     debouncer (defaultIdeOptions sessionLoader) vfs
+        ide <- initialise def mainRule (pure $ IdInt 0) (showEvent lock) dummyWithProg (const (const id)) (logger Info)     debouncer (defaultIdeOptions sessionLoader) vfs hiedb hiechan
 
         putStrLn "\nStep 4/4: Type checking the files"
         setFilesOfInterest ide $ HashMap.fromList $ map ((, OnDisk) . toNormalizedFilePath') files

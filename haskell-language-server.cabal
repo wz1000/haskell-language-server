@@ -56,18 +56,25 @@ library
   autogen-modules:  Paths_haskell_language_server
   hs-source-dirs:   src
   build-depends:
+    , async
+    , base16-bytestring
+    , bytestring
     , containers
+    , cryptohash-sha1
     , data-default
     , ghc
     , ghcide                >=0.6.0.1
     , gitrev
     , haskell-lsp           ^>=0.22
+    , hie-bios
+    , hiedb
     , hls-plugin-api        >=0.5
     , hslogger
     , optparse-applicative
     , optparse-simple
     , process
     , shake
+    , sqlite-simple
     , unordered-containers
 
   ghc-options:      -Wall -Wredundant-constraints -Wno-name-shadowing
@@ -285,9 +292,12 @@ executable haskell-language-server
 
   build-depends:
     , aeson
+    , async
+    , base16-bytestring
     , binary
     , bytestring
     , containers
+    , cryptohash-sha1
     , deepseq
     , ghc
     , ghc-boot-th
@@ -295,6 +305,8 @@ executable haskell-language-server
     , hashable
     , haskell-language-server
     , haskell-lsp              ^>=0.22
+    , hie-bios
+    , hiedb
     , lens
     , regex-tdfa
     , hslogger
@@ -305,6 +317,7 @@ executable haskell-language-server
     , regex-tdfa
     , safe-exceptions
     , shake                    >=0.17.5
+    , sqlite-simple
     , temporary
     , time
     , transformers
@@ -453,7 +466,3 @@ test-suite wrapper-test
   hs-source-dirs:     test/wrapper
   main-is:            Main.hs
   ghc-options:        -Wall
-
-
-
-
