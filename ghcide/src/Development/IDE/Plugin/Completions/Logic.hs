@@ -14,6 +14,7 @@ module Development.IDE.Plugin.Completions.Logic (
 
 import Control.Applicative
 import Data.Char (isAlphaNum, isUpper)
+import Data.Either (fromRight)
 import Data.Generics
 import Data.List.Extra as List hiding (stripPrefix)
 import qualified Data.Map  as Map
@@ -337,13 +338,13 @@ cacheDataProducer packageState curMod rdrEnv limports deps = do
                 name' <- lookupName packageState m n
                 return $ name' >>= safeTyThingForRecord
 
-        let recordCompls = case either (const Nothing) id record_ty of
+        let recordCompls = case fromRight Nothing record_ty of
                 Just (ctxStr, flds) -> case flds of
                     [] -> []
                     _ -> [mkRecordSnippetCompItem ctxStr flds (ppr mn) docs imp']
                 Nothing -> []
 
-        return $ [mkNameCompItem n mn (either (const Nothing) id ty) Nothing docs imp'] ++
+        return $ [mkNameCompItem n mn (fromRight Nothing ty) Nothing docs imp'] ++
                  recordCompls
 
   (unquals,quals) <- getCompls rdrElts
