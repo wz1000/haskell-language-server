@@ -121,10 +121,10 @@ initializeResponseTests = withResource acquire release tests where
     -- BUG in lsp-test, this test fails, just change the accepted response
     -- for now
     , chk "NO goto implementation"  _implementationProvider (Just $ GotoOptionsStatic True)
-    , chk "NO find references"          _referencesProvider  Nothing
+    , chk "   find references"          _referencesProvider  (Just True)
     , chk "   doc highlight"     _documentHighlightProvider  (Just True)
     , chk "   doc symbol"           _documentSymbolProvider  (Just True)
-    , chk "NO workspace symbol"    _workspaceSymbolProvider  Nothing
+    , chk "   workspace symbol"    _workspaceSymbolProvider  (Just True)
     , chk "   code action"             _codeActionProvider $ Just $ CodeActionOptionsStatic True
     , chk "   code lens"                 _codeLensProvider $ Just $ CodeLensOptions Nothing
     , chk "NO doc formatting"   _documentFormattingProvider  Nothing
