@@ -2424,7 +2424,7 @@ findDefinitionAndHoverTests = let
     , testGroup "type-definition" typeDefinitionTests ]
 
   typeDefinitionTests = [ tst (getTypeDefinitions, checkDefs) aaaL14 (pure tcData) "Saturated data con"
-                        , tst (getTypeDefinitions, checkDefs) opL16 (pure [ExpectNoDefinitions]) "Polymorphic variable"]
+                        , tst (getTypeDefinitions, checkDefs) aL20 (pure [ExpectNoDefinitions]) "Polymorphic variable"]
 
   test runDef runHover look expect = testM runDef runHover look (return expect)
 
@@ -2438,6 +2438,7 @@ findDefinitionAndHoverTests = let
   fffL4  = _start fffR     ;  fffR = mkRange 8  4    8  7 ; fff  = [ExpectRange fffR]
   fffL8  = Position 12  4  ;
   fffL14 = Position 18  7  ;
+  aL20   = Position 19 15
   aaaL14 = Position 18 20  ;  aaa    = [mkR  11  0   11  3]
   dcL7   = Position 11 11  ;  tcDC   = [mkR   7 23    9 16]
   dcL12  = Position 16 11  ;
