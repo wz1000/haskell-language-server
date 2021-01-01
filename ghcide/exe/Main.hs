@@ -267,7 +267,7 @@ runIde dir Arguments{..} hiedb hiechan = do
 
         unless (null failed) (exitWith $ ExitFailure (length failed))
 
-{-# ANN main ("HLint: ignore Use nubOrd" :: String) #-}
+{-# ANN runIde ("HLint: ignore Use nubOrd" :: String) #-}
 
 expandFiles :: [FilePath] -> IO [FilePath]
 expandFiles = concatMapM $ \x -> do
