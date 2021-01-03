@@ -1,13 +1,9 @@
 module Reference (tests) where
 
-import Control.Lens
 import Control.Monad.IO.Class
-import Control.Monad (forM)
-import qualified Data.Set as Set
+import Data.Tuple.Extra (first3)
 import Language.Haskell.LSP.Test
 import Language.Haskell.LSP.Types
-import Language.Haskell.LSP.Types.Lens
-import System.Directory (canonicalizePath)
 import System.FilePath ((</>))
 import System.Time.Extra (sleep)
 import Test.Hls.Util
@@ -136,10 +132,6 @@ tests = testGroup "references"
           ]
     ]
 
--- | To locate a symbol, we provide a path to the file from the HLS root
--- directory, the line number, and the column number. (0 indexed.)
-type SymbolLocation = (FilePath, Int, Int)
-
 -- | When we ask for all references to symbol "foo", should the declaration "foo
 -- = 2" be among the references returned?
 data IncludeDeclaration =
@@ -152,19 +144,6 @@ getReferences' (file, l, c) includeDeclaration = do
     getReferences doc (Position l c) $ toBool includeDeclaration
     where toBool YesIncludeDeclaration = True
           toBool NoExcludeDeclaration = False
-
-expectSameLocations :: [Location] -> [SymbolLocation] -> Assertion
-actual `expectSameLocations` expected = do
-    let actual' =
-            Set.map (\location -> (location ^. uri
-                                   , location ^. range . start . line
-                                   , location ^. range . start . character))
-            $ Set.fromList actual
-    expected' <- Set.fromList <$>
-        (forM expected $ \(file, l, c) -> do
-                              fp <- canonicalizePath $ referencesPath </> file
-                              return (filePathToUri fp, l, c))
-    actual' @?= expected'
 
 referencesPath :: FilePath
 referencesPath = "test/testdata/references"
@@ -189,4 +168,4 @@ referenceTest :: SymbolLocation -> IncludeDeclaration -> [SymbolLocation] -> Ass
 referenceTest loc includeDeclaration expected =
     referenceTestSession $ do
         actual <- getReferences' loc includeDeclaration
-        liftIO $ actual `expectSameLocations` expected
+        liftIO $ actual `expectSameLocations` map (first3 (referencesPath </>)) expected
