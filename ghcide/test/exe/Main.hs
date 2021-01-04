@@ -11,12 +11,13 @@
 module Main (main) where
 
 import Control.Applicative.Combinators
-import Control.Exception (catch)
+import Control.Exception (bracket_, catch)
 import qualified Control.Lens as Lens
 import Control.Monad
 import Control.Monad.IO.Class (liftIO)
 import Data.Aeson (FromJSON, Value, toJSON)
 import qualified Data.Binary as Binary
+import Data.Default
 import Data.Foldable
 import Data.List.Extra
 import Data.Maybe
@@ -33,6 +34,7 @@ import Development.IDE.Test.Runfiles
 import qualified Development.IDE.Types.Diagnostics as Diagnostics
 import Development.IDE.Types.Location
 import Development.Shake (getDirectoryFilesIO)
+import Ide.Plugin.Config
 import qualified Experiments as Bench
 import Language.Haskell.LSP.Test
 import Language.Haskell.LSP.Messages
@@ -41,7 +43,7 @@ import Language.Haskell.LSP.Types.Capabilities
 import qualified Language.Haskell.LSP.Types.Lens as Lsp (diagnostics, params, message)
 import Language.Haskell.LSP.VFS (applyChange)
 import Network.URI
-import System.Environment.Blank (getEnv, setEnv)
+import System.Environment.Blank (unsetEnv, getEnv, setEnv)
 import System.FilePath
 import System.IO.Extra hiding (withTempDir)
 import qualified System.IO.Extra
@@ -58,8 +60,10 @@ import Test.Tasty.HUnit
 import Test.Tasty.QuickCheck
 import System.Time.Extra
 import Development.IDE.Plugin.CodeAction (typeSignatureCommandId, blockCommandId, matchRegExMultipleImports)
-import Development.IDE.Plugin.Test (WaitForIdeRuleResult(..), TestRequest(WaitForIdeRule, BlockSeconds,GetInterfaceFilesDir))
+import Development.IDE.Plugin.Test (WaitForIdeRuleResult(..), TestRequest(BlockSeconds,GetInterfaceFilesDir))
 import Control.Monad.Extra (whenJust)
+import qualified Language.Haskell.LSP.Types.Lens as L
+import Control.Lens ((^.))
 
 main :: IO ()
 main = do
@@ -630,11 +634,6 @@ cancellationTemplate (edit, undoEdit) mbKey = testCase (maybe "-" fst mbKey) $ r
         -- similar to run except it disables kick
         runTestNoKick s = withTempDir $ \dir -> runInDir' dir "." "." ["--test-no-kick"] s
 
-        waitForAction key TextDocumentIdentifier{_uri} = do
-            waitId <- sendRequest (CustomClientMethod "test") (WaitForIdeRule key _uri)
-            ResponseMessage{_result} <- skipManyTill anyMessage $ responseForId waitId
-            return _result
-
         typeCheck doc = do
             Right WaitForIdeRuleResult {..} <- waitForAction "TypeCheck" doc
             liftIO $ assertBool "The file should typecheck" ideResultSuccess
@@ -1063,190 +1062,200 @@ removeImportTests = testGroup "remove import actions"
 
 extendImportTests :: TestTree
 extendImportTests = testGroup "extend import actions"
-  [ testSession "extend single line import with value" $ template
-      [("ModuleA.hs", T.unlines
-            [ "module ModuleA where"
-            , "stuffA :: Double"
-            , "stuffA = 0.00750"
-            , "stuffB :: Integer"
-            , "stuffB = 123"
-            ])]
-      ("ModuleB.hs", T.unlines
-            [ "module ModuleB where"
-            , "import ModuleA as A (stuffB)"
-            , "main = print (stuffA, stuffB)"
-            ])
-      (Range (Position 3 17) (Position 3 18))
-      ["Add stuffA to the import list of ModuleA"]
-      (T.unlines
-            [ "module ModuleB where"
-            , "import ModuleA as A (stuffA, stuffB)"
-            , "main = print (stuffA, stuffB)"
-            ])
-  , testSession "extend single line import with operator" $ template
-      [("ModuleA.hs", T.unlines
-            [ "module ModuleA where"
-            , "(.*) :: Integer -> Integer -> Integer"
-            , "x .* y = x * y"
-            , "stuffB :: Integer"
-            , "stuffB = 123"
-            ])]
-      ("ModuleB.hs", T.unlines
-            [ "module ModuleB where"
-            , "import ModuleA as A (stuffB)"
-            , "main = print (stuffB .* stuffB)"
-            ])
-      (Range (Position 3 17) (Position 3 18))
-      ["Add (.*) to the import list of ModuleA"]
-      (T.unlines
-            [ "module ModuleB where"
-            , "import ModuleA as A ((.*), stuffB)"
-            , "main = print (stuffB .* stuffB)"
-            ])
-  , testSession "extend single line import with type" $ template
-      [("ModuleA.hs", T.unlines
-            [ "module ModuleA where"
-            , "type A = Double"
-            ])]
-      ("ModuleB.hs", T.unlines
-            [ "module ModuleB where"
-            , "import ModuleA ()"
-            , "b :: A"
-            , "b = 0"
-            ])
-      (Range (Position 2 5) (Position 2 5))
-      ["Add A to the import list of ModuleA"]
-      (T.unlines
-            [ "module ModuleB where"
-            , "import ModuleA (A)"
-            , "b :: A"
-            , "b = 0"
-            ])
-  , testSession "extend single line import with constructor" $ template
-      [("ModuleA.hs", T.unlines
-            [ "module ModuleA where"
-            , "data A = Constructor"
-            ])]
-      ("ModuleB.hs", T.unlines
-            [ "module ModuleB where"
-            , "import ModuleA (A)"
-            , "b :: A"
-            , "b = Constructor"
-            ])
-      (Range (Position 2 5) (Position 2 5))
-      ["Add A(Constructor) to the import list of ModuleA"]
-      (T.unlines
-            [ "module ModuleB where"
-            , "import ModuleA (A(Constructor))"
-            , "b :: A"
-            , "b = Constructor"
-            ])
-  , testSession "extend single line import with mixed constructors" $ template
-      [("ModuleA.hs", T.unlines
-            [ "module ModuleA where"
-            , "data A = ConstructorFoo | ConstructorBar"
-            , "a = 1"
-            ])]
-      ("ModuleB.hs", T.unlines
-            [ "module ModuleB where"
-            , "import ModuleA (A(ConstructorBar), a)"
-            , "b :: A"
-            , "b = ConstructorFoo"
-            ])
-      (Range (Position 2 5) (Position 2 5))
-      ["Add A(ConstructorFoo) to the import list of ModuleA"]
-      (T.unlines
-            [ "module ModuleB where"
-            , "import ModuleA (A(ConstructorFoo, ConstructorBar), a)"
-            , "b :: A"
-            , "b = ConstructorFoo"
-            ])
-  , testSession "extend single line qualified import with value" $ template
-      [("ModuleA.hs", T.unlines
-            [ "module ModuleA where"
-            , "stuffA :: Double"
-            , "stuffA = 0.00750"
-            , "stuffB :: Integer"
-            , "stuffB = 123"
-            ])]
-      ("ModuleB.hs", T.unlines
-            [ "module ModuleB where"
-            , "import qualified ModuleA as A (stuffB)"
-            , "main = print (A.stuffA, A.stuffB)"
-            ])
-      (Range (Position 3 17) (Position 3 18))
-      ["Add stuffA to the import list of ModuleA"]
-      (T.unlines
-            [ "module ModuleB where"
-            , "import qualified ModuleA as A (stuffA, stuffB)"
-            , "main = print (A.stuffA, A.stuffB)"
-            ])
-  , testSession "extend multi line import with value" $ template
-      [("ModuleA.hs", T.unlines
-            [ "module ModuleA where"
-            , "stuffA :: Double"
-            , "stuffA = 0.00750"
-            , "stuffB :: Integer"
-            , "stuffB = 123"
-            ])]
-      ("ModuleB.hs", T.unlines
-            [ "module ModuleB where"
-            , "import ModuleA (stuffB"
-            , "               )"
-            , "main = print (stuffA, stuffB)"
-            ])
-      (Range (Position 3 17) (Position 3 18))
-      ["Add stuffA to the import list of ModuleA"]
-      (T.unlines
-            [ "module ModuleB where"
-            , "import ModuleA (stuffA, stuffB"
-            , "               )"
-            , "main = print (stuffA, stuffB)"
-            ])
-  , testSession "extend import list with multiple choices" $ template
-      [("ModuleA.hs", T.unlines
-            --  this is just a dummy module to help the arguments needed for this test
-            [  "module ModuleA (bar) where"
-             , "bar = 10"
-               ]),
-      ("ModuleB.hs", T.unlines
-            --  this is just a dummy module to help the arguments needed for this test
-            [  "module ModuleB (bar) where"
-             , "bar = 10"
-               ])]
-      ("ModuleC.hs", T.unlines
-            [ "module ModuleC where"
-            , "import ModuleB ()"
-            , "import ModuleA ()"
-            , "foo = bar"
-            ])
-      (Range (Position 3 17) (Position 3 18))
-      ["Add bar to the import list of ModuleA",
-       "Add bar to the import list of ModuleB"]
-      (T.unlines
-            [ "module ModuleC where"
-            , "import ModuleB ()"
-            , "import ModuleA (bar)"
-            , "foo = bar"
-            ])
+  [ testGroup "with checkAll" $ tests True
+  , testGroup "without checkAll" $ tests False
   ]
   where
-    template setUpModules moduleUnderTest range expectedActions expectedContentB = do
-      mapM_ (\x -> createDoc (fst x) "haskell" (snd x)) setUpModules
-      docB <- createDoc (fst moduleUnderTest) "haskell" (snd moduleUnderTest)
-      _  <- waitForDiagnostics
-      void (skipManyTill anyMessage message :: Session WorkDoneProgressEndNotification)
-      codeActions <- filter (\(CACodeAction CodeAction{_title=x}) -> T.isPrefixOf "Add" x)
-          <$>  getCodeActions docB range
-      let expectedTitles = (\(CACodeAction CodeAction{_title=x}) ->x) <$> codeActions
-      liftIO $ expectedActions @=? expectedTitles
+    tests overrideCheckProject =
+        [ testSession "extend single line import with value" $ template
+            [("ModuleA.hs", T.unlines
+                    [ "module ModuleA where"
+                    , "stuffA :: Double"
+                    , "stuffA = 0.00750"
+                    , "stuffB :: Integer"
+                    , "stuffB = 123"
+                    ])]
+            ("ModuleB.hs", T.unlines
+                    [ "module ModuleB where"
+                    , "import ModuleA as A (stuffB)"
+                    , "main = print (stuffA, stuffB)"
+                    ])
+            (Range (Position 3 17) (Position 3 18))
+            ["Add stuffA to the import list of ModuleA"]
+            (T.unlines
+                    [ "module ModuleB where"
+                    , "import ModuleA as A (stuffA, stuffB)"
+                    , "main = print (stuffA, stuffB)"
+                    ])
+        , testSession "extend single line import with operator" $ template
+            [("ModuleA.hs", T.unlines
+                    [ "module ModuleA where"
+                    , "(.*) :: Integer -> Integer -> Integer"
+                    , "x .* y = x * y"
+                    , "stuffB :: Integer"
+                    , "stuffB = 123"
+                    ])]
+            ("ModuleB.hs", T.unlines
+                    [ "module ModuleB where"
+                    , "import ModuleA as A (stuffB)"
+                    , "main = print (stuffB .* stuffB)"
+                    ])
+            (Range (Position 3 17) (Position 3 18))
+            ["Add (.*) to the import list of ModuleA"]
+            (T.unlines
+                    [ "module ModuleB where"
+                    , "import ModuleA as A ((.*), stuffB)"
+                    , "main = print (stuffB .* stuffB)"
+                    ])
+        , testSession "extend single line import with type" $ template
+            [("ModuleA.hs", T.unlines
+                    [ "module ModuleA where"
+                    , "type A = Double"
+                    ])]
+            ("ModuleB.hs", T.unlines
+                    [ "module ModuleB where"
+                    , "import ModuleA ()"
+                    , "b :: A"
+                    , "b = 0"
+                    ])
+            (Range (Position 2 5) (Position 2 5))
+            ["Add A to the import list of ModuleA"]
+            (T.unlines
+                    [ "module ModuleB where"
+                    , "import ModuleA (A)"
+                    , "b :: A"
+                    , "b = 0"
+                    ])
+        , testSession "extend single line import with constructor" $ template
+            [("ModuleA.hs", T.unlines
+                    [ "module ModuleA where"
+                    , "data A = Constructor"
+                    ])]
+            ("ModuleB.hs", T.unlines
+                    [ "module ModuleB where"
+                    , "import ModuleA (A)"
+                    , "b :: A"
+                    , "b = Constructor"
+                    ])
+            (Range (Position 2 5) (Position 2 5))
+            ["Add A(Constructor) to the import list of ModuleA"]
+            (T.unlines
+                    [ "module ModuleB where"
+                    , "import ModuleA (A(Constructor))"
+                    , "b :: A"
+                    , "b = Constructor"
+                    ])
+        , testSession "extend single line import with mixed constructors" $ template
+            [("ModuleA.hs", T.unlines
+                    [ "module ModuleA where"
+                    , "data A = ConstructorFoo | ConstructorBar"
+                    , "a = 1"
+                    ])]
+            ("ModuleB.hs", T.unlines
+                    [ "module ModuleB where"
+                    , "import ModuleA (A(ConstructorBar), a)"
+                    , "b :: A"
+                    , "b = ConstructorFoo"
+                    ])
+            (Range (Position 2 5) (Position 2 5))
+            ["Add A(ConstructorFoo) to the import list of ModuleA"]
+            (T.unlines
+                    [ "module ModuleB where"
+                    , "import ModuleA (A(ConstructorFoo, ConstructorBar), a)"
+                    , "b :: A"
+                    , "b = ConstructorFoo"
+                    ])
+        , testSession "extend single line qualified import with value" $ template
+            [("ModuleA.hs", T.unlines
+                    [ "module ModuleA where"
+                    , "stuffA :: Double"
+                    , "stuffA = 0.00750"
+                    , "stuffB :: Integer"
+                    , "stuffB = 123"
+                    ])]
+            ("ModuleB.hs", T.unlines
+                    [ "module ModuleB where"
+                    , "import qualified ModuleA as A (stuffB)"
+                    , "main = print (A.stuffA, A.stuffB)"
+                    ])
+            (Range (Position 3 17) (Position 3 18))
+            ["Add stuffA to the import list of ModuleA"]
+            (T.unlines
+                    [ "module ModuleB where"
+                    , "import qualified ModuleA as A (stuffA, stuffB)"
+                    , "main = print (A.stuffA, A.stuffB)"
+                    ])
+        , testSession "extend multi line import with value" $ template
+            [("ModuleA.hs", T.unlines
+                    [ "module ModuleA where"
+                    , "stuffA :: Double"
+                    , "stuffA = 0.00750"
+                    , "stuffB :: Integer"
+                    , "stuffB = 123"
+                    ])]
+            ("ModuleB.hs", T.unlines
+                    [ "module ModuleB where"
+                    , "import ModuleA (stuffB"
+                    , "               )"
+                    , "main = print (stuffA, stuffB)"
+                    ])
+            (Range (Position 3 17) (Position 3 18))
+            ["Add stuffA to the import list of ModuleA"]
+            (T.unlines
+                    [ "module ModuleB where"
+                    , "import ModuleA (stuffA, stuffB"
+                    , "               )"
+                    , "main = print (stuffA, stuffB)"
+                    ])
+        , testSession "extend import list with multiple choices" $ template
+            [("ModuleA.hs", T.unlines
+                    --  this is just a dummy module to help the arguments needed for this test
+                    [  "module ModuleA (bar) where"
+                    , "bar = 10"
+                    ]),
+            ("ModuleB.hs", T.unlines
+                    --  this is just a dummy module to help the arguments needed for this test
+                    [  "module ModuleB (bar) where"
+                    , "bar = 10"
+                    ])]
+            ("ModuleC.hs", T.unlines
+                    [ "module ModuleC where"
+                    , "import ModuleB ()"
+                    , "import ModuleA ()"
+                    , "foo = bar"
+                    ])
+            (Range (Position 3 17) (Position 3 18))
+            ["Add bar to the import list of ModuleA",
+            "Add bar to the import list of ModuleB"]
+            (T.unlines
+                    [ "module ModuleC where"
+                    , "import ModuleB ()"
+                    , "import ModuleA (bar)"
+                    , "foo = bar"
+                    ])
+        ]
+      where
+        template setUpModules moduleUnderTest range expectedActions expectedContentB = do
+            sendNotification WorkspaceDidChangeConfiguration
+                (DidChangeConfigurationParams $ toJSON
+                  def{checkProject = overrideCheckProject})
 
-      -- Get the first action and execute the first action
-      let CACodeAction action :  _
-                  = sortOn (\(CACodeAction CodeAction{_title=x}) -> x) codeActions
-      executeCodeAction action
-      contentAfterAction <- documentContents docB
-      liftIO $ expectedContentB @=? contentAfterAction
+
+            mapM_ (\x -> createDoc (fst x) "haskell" (snd x)) setUpModules
+            docB <- createDoc (fst moduleUnderTest) "haskell" (snd moduleUnderTest)
+            _  <- waitForDiagnostics
+            void (skipManyTill anyMessage message :: Session WorkDoneProgressEndNotification)
+            codeActions <- filter (\(CACodeAction CodeAction{_title=x}) -> T.isPrefixOf "Add" x)
+                <$>  getCodeActions docB range
+            let expectedTitles = (\(CACodeAction CodeAction{_title=x}) ->x) <$> codeActions
+            liftIO $ expectedActions @=? expectedTitles
+
+            -- Get the first action and execute the first action
+            let CACodeAction action :  _
+                        = sortOn (\(CACodeAction CodeAction{_title=x}) -> x) codeActions
+            executeCodeAction action
+            contentAfterAction <- documentContents docB
+            liftIO $ expectedContentB @=? contentAfterAction
 
 extendImportTestsRegEx :: TestTree
 extendImportTestsRegEx = testGroup "regex parsing"
@@ -3389,7 +3398,7 @@ cradleTests :: TestTree
 cradleTests = testGroup "cradle"
     [testGroup "dependencies" [sessionDepsArePickedUp]
     ,testGroup "ignore-fatal" [ignoreFatalWarning]
-    ,testGroup "loading" [loadCradleOnlyonce]
+    ,testGroup "loading" [loadCradleOnlyonce, retryFailedCradle]
     ,testGroup "multi"   [simpleMultiTest, simpleMultiTest2]
     ,testGroup "sub-directory"   [simpleSubDirectoryTest]
     ]
@@ -3415,6 +3424,43 @@ loadCradleOnlyonce = testGroup "load cradle only once"
             _ <- createDoc "A.hs" "haskell" "module A where\nimport LoadCradleBar"
             msgs <- manyTill (skipManyTill anyMessage cradleLoadedMessage) (skipManyTill anyMessage (message @PublishDiagnosticsNotification))
             liftIO $ length msgs @?= 0
+
+retryFailedCradle :: TestTree
+retryFailedCradle = testSession' "retry failed" $ \dir -> do
+  -- The false cradle always fails
+  let hieContents = "cradle: {bios: {shell: \"false\"}}"
+      hiePath = dir </> "hie.yaml"
+  liftIO $ writeFile hiePath hieContents
+  hieDoc <- createDoc hiePath "yaml" $ T.pack hieContents
+  let aPath = dir </> "A.hs"
+  doc <- createDoc aPath "haskell" "main = return ()"
+  Right WaitForIdeRuleResult {..} <- waitForAction "TypeCheck" doc
+  liftIO $ "Test assumption failed: cradle should error out" `assertBool` not ideResultSuccess
+
+  -- Fix the cradle and typecheck again
+  let validCradle = "cradle: {bios: {shell: \"echo A.hs\"}}"
+  liftIO $ writeFileUTF8 hiePath $ T.unpack validCradle
+  changeDoc
+    hieDoc
+    [ TextDocumentContentChangeEvent
+        { _range = Nothing,
+          _rangeLength = Nothing,
+          _text = validCradle
+        }
+    ]
+
+  -- Force a session restart by making an edit, just to dirty the typecheck node
+  changeDoc
+    doc
+    [ TextDocumentContentChangeEvent
+        { _range = Just Range {_start = Position 0 0, _end = Position 0 0},
+          _rangeLength = Nothing,
+          _text = "\n"
+        }
+    ]
+
+  Right WaitForIdeRuleResult {..} <- waitForAction "TypeCheck" doc
+  liftIO $ "No joy after fixing the cradle" `assertBool` ideResultSuccess
 
 
 dependentFileTest :: TestTree
@@ -3480,17 +3526,19 @@ simpleSubDirectoryTest =
     expectNoMoreDiagnostics 0.5
 
 simpleMultiTest :: TestTree
-simpleMultiTest = testCase "simple-multi-test" $ runWithExtraFiles "multi" $ \dir -> do
+simpleMultiTest = testCase "simple-multi-test" $ withLongTimeout $ runWithExtraFiles "multi" $ \dir -> do
     let aPath = dir </> "a/A.hs"
         bPath = dir </> "b/B.hs"
     aSource <- liftIO $ readFileUtf8 aPath
-    (TextDocumentIdentifier adoc) <- createDoc aPath "haskell" aSource
-    expectNoMoreDiagnostics 0.5
+    adoc <- createDoc aPath "haskell" aSource
+    Right WaitForIdeRuleResult {..} <- waitForAction "TypeCheck" adoc
+    liftIO $ assertBool "A should typecheck" ideResultSuccess
     bSource <- liftIO $ readFileUtf8 bPath
     bdoc <- createDoc bPath "haskell" bSource
-    expectNoMoreDiagnostics 0.5
+    Right WaitForIdeRuleResult {..} <- waitForAction "TypeCheck" bdoc
+    liftIO $ assertBool "B should typecheck" ideResultSuccess
     locs <- getDefinitions bdoc (Position 2 7)
-    let fooL = mkL adoc 2 0 2 3
+    let fooL = mkL (adoc ^. L.uri) 2 0 2 3
     checkDefs locs (pure [fooL])
     expectNoMoreDiagnostics 0.5
 
@@ -3856,6 +3904,9 @@ run' s = withTempDir $ \dir -> runInDir dir (s dir)
 runInDir :: FilePath -> Session a -> IO a
 runInDir dir = runInDir' dir "." "." []
 
+withLongTimeout :: IO a -> IO a
+withLongTimeout = bracket_ (setEnv "LSP_TIMEOUT" "120" True) (unsetEnv "LSP_TIMEOUT")
+
 -- | Takes a directory as well as relative paths to where we should launch the executable as well as the session root.
 runInDir' :: FilePath -> FilePath -> FilePath -> [String] -> Session a -> IO a
 runInDir' dir startExeIn startSessionIn extraOptions s = do
@@ -3876,18 +3927,18 @@ runInDir' dir startExeIn startSessionIn extraOptions s = do
   setEnv "HOME" "/homeless-shelter" False
   let lspTestCaps = fullCaps { _window = Just $ WindowClientCapabilities $ Just True }
   logColor <- fromMaybe True <$> checkEnv "LSP_TEST_LOG_COLOR"
+  timeoutOverride <- fmap read <$> getEnv "LSP_TIMEOUT"
+  let conf = defaultConfig{messageTimeout = fromMaybe (messageTimeout defaultConfig) timeoutOverride}
+            -- uncomment this or set LSP_TEST_LOG_STDERR=1 to see all logging
+            --   { logStdErr = True }
+            --   uncomment this or set LSP_TEST_LOG_MESSAGES=1 to see all messages
+            --   { logMessages = True }
   runSessionWithConfig conf{logColor} cmd lspTestCaps projDir s
   where
     checkEnv :: String -> IO (Maybe Bool)
     checkEnv s = fmap convertVal <$> getEnv s
     convertVal "0" = False
     convertVal _ = True
-
-    conf = defaultConfig
-      -- uncomment this or set LSP_TEST_LOG_STDERR=1 to see all logging
-    --   { logStdErr = True }
-    --   uncomment this or set LSP_TEST_LOG_MESSAGES=1 to see all messages
-    --   { logMessages = True }
 
 openTestDataDoc :: FilePath -> Session TextDocumentIdentifier
 openTestDataDoc path = do

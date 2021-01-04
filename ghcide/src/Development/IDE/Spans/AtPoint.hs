@@ -257,7 +257,7 @@ typeLocationsAtPoint hiedb lookupModule _ideOptions pos (HAR _ ast _ hieKind) =
             AppTy a b -> getTypes [a,b]
             TyConApp tc ts -> tyConName tc : getTypes ts
             ForAllTy _ t -> getTypes [t]
-            FunTy a b -> getTypes [a,b]
+            FunTy _ a b -> getTypes [a,b]
             CastTy t _ -> getTypes [t]
             _ -> []
         in fmap nubOrd $ concatMapM (fmap (maybe [] id) . nameToLocation hiedb lookupModule) (getTypes ts)
@@ -338,3 +338,4 @@ pointCommand hf pos k =
    sp fs = mkRealSrcSpan (sloc fs) (sloc fs)
    line = _line pos
    cha = _character pos
+

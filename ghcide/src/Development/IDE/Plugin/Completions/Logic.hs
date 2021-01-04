@@ -54,6 +54,7 @@ import ConLike
 import GhcPlugins (
     flLabel,
     unpackFS)
+import Data.Either (fromRight)
 
 -- From haskell-ide-engine/hie-plugin-api/Haskell/Ide/Engine/Context.hs
 
@@ -344,8 +345,8 @@ cacheDataProducer packageState curMod rdrEnv limports deps = do
                     _ -> [mkRecordSnippetCompItem ctxStr flds (ppr mn) docs imp']
                 Nothing -> []
 
-        return $ [mkNameCompItem n mn (fromRight Nothing ty) Nothing docs imp'] ++
-                 recordCompls
+        return $ mkNameCompItem n mn (fromRight Nothing ty) Nothing docs imp'
+                 : recordCompls
 
   (unquals,quals) <- getCompls rdrElts
 

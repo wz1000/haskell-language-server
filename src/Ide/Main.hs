@@ -35,16 +35,17 @@ import Development.IDE.LSP.LanguageServer
 import Development.IDE.LSP.Protocol
 import Development.IDE.Plugin
 import Development.IDE.Session (loadSession, findCradle, defaultLoadingOptions, cacheDir)
+import Development.IDE.Plugin.HLS
 import Development.IDE.Types.Diagnostics
 import Development.IDE.Types.Location
-import Development.IDE.Types.Logger
+import Development.IDE.Types.Logger as G
 import Development.IDE.Types.Options
 import qualified Language.Haskell.LSP.Core as LSP
 import Ide.Arguments
 import Ide.Logger
-import Ide.Plugin
 import Ide.Version
 import Ide.Plugin.Config
+import Ide.PluginUtils
 import Ide.Types (IdePlugins, ipMap)
 import Language.Haskell.LSP.Messages
 import Language.Haskell.LSP.Types
@@ -77,7 +78,7 @@ import Development.IDE.LSP.HoverDefinition as HoverDefinition
 ghcIdePlugins :: T.Text -> IdePlugins -> (Plugin Config, [T.Text])
 ghcIdePlugins pid ps = (asGhcIdePlugin ps, allLspCmdIds' pid ps)
 
-defaultMain :: Arguments -> IdePlugins -> IO ()
+defaultMain :: Arguments -> IdePlugins IdeState -> IO ()
 defaultMain args idePlugins = do
     -- WARNING: If you write to stdout before runLanguageServer
     --          then the language server will not work
@@ -142,12 +143,9 @@ runLspMode' lspArgs@LspArguments{..} idePlugins hiedb hiechan = do
 
     dir <- IO.getCurrentDirectory
 
-    pid <- getPid
+    pid <- T.pack . show <$> getProcessID
     let
-        (ps, commandIds) = ghcIdePlugins pid idePlugins
-        plugins = Completions.plugin <> CodeAction.plugin <>
-                  Plugin mempty HoverDefinition.setHandlersDefinition <>
-                  ps
+        (plugins, commandIds) = ghcIdePlugins pid idePlugins
         options = def { LSP.executeCommandCommands = Just commandIds
                       , LSP.completionTriggerCharacters = Just "."
                       }
