@@ -42,6 +42,7 @@ module Development.IDE.GHC.Compat(
     disableWarningsAsErrors,
     AvailInfo,
     tcg_exports,
+    pattern FunTy,
 
 #if MIN_GHC_API_VERSION(8,10,0)
     module GHC.Hs.Extension,
@@ -89,6 +90,7 @@ import HsExtension
 #endif
 
 import qualified GHC
+import qualified TyCoRep
 import GHC hiding (
       ModLocation,
       HasSrcSpan,
@@ -282,4 +284,11 @@ pattern ExposePackage :: String -> PackageArg -> ModRenaming -> PackageFlag
 pattern ExposePackage s a mr <- DynFlags.ExposePackage s a _ mr
 #else
 pattern ExposePackage s a mr = DynFlags.ExposePackage s a mr
+#endif
+
+pattern FunTy :: Type -> Type -> Type
+#if MIN_GHC_API_VERSION(8, 10, 0)
+pattern FunTy arg res <- TyCoRep.FunTy {ft_arg = arg, ft_res = res}
+#else
+pattern FunTy arg res <- TyCoRep.FunTy arg res
 #endif
