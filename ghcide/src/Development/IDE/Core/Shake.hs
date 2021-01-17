@@ -874,6 +874,9 @@ usesWithStale :: IdeRule k v
     => k -> [NormalizedFilePath] -> Action [Maybe (v, PositionMapping)]
 usesWithStale key files = do
     _ <- apply (map (Q . (key,)) files)
+    -- We don't look at the result of the 'apply' since 'lastValue' will
+    -- return the most recent successfully computed value regardless of
+    -- whether the rule succeeded or not.
     mapM (lastValue key) files
 
 -- | Define a new Rule with early cutoff
