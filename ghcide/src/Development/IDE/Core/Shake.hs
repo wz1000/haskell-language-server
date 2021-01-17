@@ -297,10 +297,13 @@ lastValueIO s@ShakeExtras{positionMapping,persistentKeys,state} k file = do
     hm <- readVar state
     allMappings <- readVar positionMapping
 
-    let readPersistent = do
+    let readPersistent
+          | IdeTesting testing <- ideTesting s -- Don't read stale persistent values in tests
+          , testing = pure Nothing
+          | otherwise = do
           pmap <- readVar persistentKeys
           mv <- runMaybeT $ do
-            liftIO $ Logger.logDebug (logger s) $ T.pack $ "LOOKUP UP PERSISTENT FOR" ++ show k
+            liftIO $ Logger.logDebug (logger s) $ T.pack $ "LOOKUP UP PERSISTENT FOR: " ++ show k
             f <- MaybeT $ pure $ HMap.lookup (Key k) pmap
             (dv,del,ver) <- MaybeT $ runIdeAction "lastValueIO" s $ f file
             MaybeT $ pure $ (,del,ver) <$> fromDynamic dv
