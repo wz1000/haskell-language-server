@@ -32,7 +32,7 @@ getArguments = execParser opts
 
 arguments :: Parser Arguments
 arguments = Arguments
-      <$> switch (long "lsp" <> help "Start talking to an LSP server")
+      <$> switch (long "lsp" <> help "Start talking to an LSP client")
       <*> optional (strOption $ long "cwd" <> metavar "DIR" <> help "Change to this directory")
       <*> switch (long "version" <> help "Show ghcide and GHC versions")
       <*> optional (strOption $ long "shake-profiling" <> metavar "DIR" <> help "Dump profiling reports to this directory")
@@ -47,6 +47,6 @@ arguments = Arguments
          <|> Typecheck <$> fileCmd )
   where
     fileCmd = many (argument str (metavar "FILES/DIRS..."))
-    lspInfo = fullDesc <> progDesc "Start talking to an LSP server"
+    lspInfo = fullDesc <> progDesc "Start talking to an LSP client"
     fileInfo = fullDesc <> progDesc "Used as a test bed to check your IDE will work"
     hieInfo = fullDesc <> progDesc "Query .hie files"
