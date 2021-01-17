@@ -805,7 +805,7 @@ getModIfaceFromDiskRule = defineEarlyCutoff $ \GetModIfaceFromDisk f -> do
         case r of
             (diags, Nothing) -> return (Nothing, (diags ++ diags_session, Nothing))
             (diags, Just x) -> do
-                let fp = Just $! hiFileFingerPrint x
+                let !fp = Just $! hiFileFingerPrint x
 
                 -- Check state of hiedb - have we indexed the corresponding `.hie` file?
                 se@ShakeExtras{hiedb} <- getShakeExtras
