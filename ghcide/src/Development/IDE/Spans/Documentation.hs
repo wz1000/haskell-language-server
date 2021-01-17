@@ -99,8 +99,8 @@ getDocumentationsTryGhc env mod sources names = do
             src <- toFileUriText $ lookupSrcHtmlForModule df mod
             return (doc, src)
           Nothing -> pure (Nothing, Nothing)
-      let docUri = (<> "#" <> selector <> showGhc name) <$> docFu
-          srcUri = (<> "#" <> showGhc name) <$> srcFu
+      let docUri = (<> "#" <> selector <> showNameWithoutUniques name) <$> docFu
+          srcUri = (<> "#" <> showNameWithoutUniques name) <$> srcFu
           selector
             | isValName name = "v:"
             | otherwise = "t:"

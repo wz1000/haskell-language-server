@@ -39,7 +39,6 @@ import Development.IDE.GHC.Util
 type DocMap = NameEnv SpanDoc
 type KindMap = NameEnv TyThing
 
-
 showGhc :: Outputable a => a -> T.Text
 showGhc = showSD . ppr
 
