@@ -115,6 +115,7 @@ import Data.Unique
 import GHC.Fingerprint
 import Data.Coerce
 import Data.Aeson (toJSON)
+import Data.Tuple.Extra (dupe)
 
 -- | Given a string buffer, return the string (after preprocessing) and the 'ParsedModule'.
 parseModule
@@ -572,13 +573,12 @@ indexHieFile se mod_summary srcPath hash hf = atomically $ do
     post tok = do
       mdone <- atomically $ do
         -- Remove current element from pending
-        modifyTVar' indexPending $ HashMap.update (\pendingHash -> guard (pendingHash /= hash) $> pendingHash) srcPath
-        pending <- readTVar indexPending
-        if HashMap.null pending
-        then Just <$> swapTVar indexCompleted 0
-        else do
-          modifyTVar' indexCompleted (+1)
-          pure Nothing
+        pending <- stateTVar indexPending $
+          dupe . HashMap.update (\pendingHash -> guard (pendingHash /= hash) $> pendingHash) srcPath
+        modifyTVar' indexCompleted (+1)
+        -- If we are done, report and reset completed
+        whenMaybe (HashMap.null pending) $
+          swapTVar indexCompleted 0
       when (coerce $ ideTesting se) $
         eventer se $ LSP.NotCustomServer $
           LSP.NotificationMessage "2.0" (LSP.CustomServerMethod "ghcide/reference/ready") (toJSON $ fromNormalizedFilePath srcPath)
