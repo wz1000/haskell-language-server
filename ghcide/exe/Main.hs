@@ -58,7 +58,6 @@ import Development.IDE.Plugin.HLS.GhcIde as GhcIde
 import Ide.Plugin.Config
 import Ide.PluginUtils (allLspCmdIds', getProcessID, pluginDescToIdePlugins)
 
-import HieDb.Types (LibDir(..))
 import HieDb.Run (Options(..), runCommand)
 
 ghcideVersion :: IO String
@@ -99,7 +98,7 @@ main = do
               , quiet = False
               , virtualFile = False
               }
-        runCommand (LibDir $ fromJust libdir) opts cmd
+        runCommand libdir opts cmd
       Typecheck (Just -> argFilesOrCmd) | not argLSP -> runWithDb dbLoc $ runIde Arguments{..}
       _ -> let argFilesOrCmd = Nothing in runWithDb dbLoc $ runIde Arguments{..}
 
