@@ -93,7 +93,6 @@ import Data.List
 import qualified Data.Set                                 as Set
 import qualified Data.Map as M
 import qualified Data.Text                                as T
-import qualified Data.Text.IO                             as T
 import qualified Data.Text.Encoding                       as T
 import           Development.IDE.GHC.Error
 import           Development.Shake                        hiding (Diagnostic)
@@ -119,6 +118,7 @@ import Control.Concurrent.Async (concurrently)
 import Control.Monad.Reader
 import Control.Exception.Safe
 
+import Data.Coerce
 import Control.Monad.State
 import FastString (FastString(uniq))
 import qualified HeaderInfo as Hdr
@@ -572,15 +572,15 @@ persistentHieFileRule :: Rules ()
 persistentHieFileRule = addPersistentRule GetHieAst $ \file -> runMaybeT $ do
   res <- readHieFileForSrcFromDisk file
   vfs <- asks vfs
+  encoding <- liftIO getLocaleEncoding
   (currentSource,ver) <- liftIO $ do
     mvf <- getVirtualFile vfs $ filePathToUri' file
     case mvf of
-      Nothing -> (,Nothing) <$> T.readFile (fromNormalizedFilePath file)
-      Just vf -> pure $ (Rope.toText $ _text vf, Just $ _lsp_version vf)
-  encoding <- liftIO $ getLocaleEncoding
+      Nothing -> (,Nothing) . T.decode encoding <$> BS.readFile (fromNormalizedFilePath file)
+      Just vf -> pure (Rope.toText $ _text vf, Just $ _lsp_version vf)
   let refmap = generateReferencesMap . getAsts . hie_asts $ res
       del = deltaFromDiff (T.decode encoding $ hie_hs_src res) currentSource
-  pure $ (HAR (hie_module res) (hie_asts res) refmap mempty (HieFromDisk res),del,ver)
+  pure (HAR (hie_module res) (hie_asts res) refmap mempty (HieFromDisk res),del,ver)
 
 getHieAstRuleDefinition :: NormalizedFilePath -> HscEnv -> TcModuleResult -> Action (IdeResult HieAstResult)
 getHieAstRuleDefinition f hsc tmr = do
@@ -590,8 +590,9 @@ getHieAstRuleDefinition f hsc tmr = do
   isFoi <- use_ IsFileOfInterest f
   diagsWrite <- case isFoi of
     IsFOI Modified -> do
-      liftIO $ eventer se $ LSP.NotCustomServer $
-        LSP.NotificationMessage "2.0" (LSP.CustomServerMethod "ghcide/reference/ready") (toJSON $ fromNormalizedFilePath f)
+      when (coerce $ ideTesting se) $
+        liftIO $ eventer se $ LSP.NotCustomServer $
+          LSP.NotificationMessage "2.0" (LSP.CustomServerMethod "ghcide/reference/ready") (toJSON $ fromNormalizedFilePath f)
       pure []
     _ | Just asts <- masts -> do
           source <- getSourceFileSource f
@@ -817,33 +818,34 @@ getModIfaceFromDiskRule = defineEarlyCutoff $ \GetModIfaceFromDisk f -> do
                       let fp = hiFileFingerPrint <$> res
                       return (fp, (diags' <> diags_session, res))
 
-                case exists of
-                  -- Don't have a .hie file, must regenerate
-                  False -> regenerateHieFile
+                if exists
+                then do
                   -- Have a hie file, must check if it matches version in db
-                  True -> do
-                    hash <- liftIO $ getFileHash hie_loc
-                    mrow <- liftIO $ HieDb.lookupHieFileFromSource hiedb (fromNormalizedFilePath f)
-                    case mrow of
-                      -- All good, the db has indexed the file
-                      Just row
-                        | hash == HieDb.modInfoHash (HieDb.hieModInfo row)
-                        , hie_loc == HieDb.hieModuleHieFile row  -> do
+                  hash <- liftIO $ getFileHash hie_loc
+                  mrow <- liftIO $ HieDb.lookupHieFileFromSource hiedb (fromNormalizedFilePath f)
+                  case mrow of
+                    -- All good, the db has indexed the file
+                    Just row
+                      | hash == HieDb.modInfoHash (HieDb.hieModInfo row)
+                      , hie_loc == HieDb.hieModuleHieFile row  -> do
+                      when (coerce $ ideTesting se) $
                         liftIO $ eventer se $ LSP.NotCustomServer $
                           LSP.NotificationMessage "2.0" (LSP.CustomServerMethod "ghcide/reference/ready") (toJSON $ fromNormalizedFilePath f)
-                        return (fp, (diags <> diags_session, Just x))
-                      -- Not in db, must re-index
-                      _ -> do
-                        mhf <- liftIO $ runIdeAction "GetModIfaceFromDisk" se $ runMaybeT $
-                          readHieFileFromDisk hie_loc
-                        case mhf of
-                          -- Uh oh, we failed to read the file for some reason, need to regenerate it
-                          Nothing -> regenerateHieFile
-                          -- can just re-index the file we read from disk
-                          Just hf -> liftIO $ do
-                            L.logInfo (logger se) $ "Re-indexing hie file for" <> T.pack (show (f,hash,fmap (HieDb.modInfoHash . HieDb.hieModInfo) mrow))
-                            indexHieFile se ms f hash hf
-                            return (fp, (diags <> diags_session, Just x))
+                      return (fp, (diags <> diags_session, Just x))
+                    -- Not in db, must re-index
+                    _ -> do
+                      mhf <- liftIO $ runIdeAction "GetModIfaceFromDisk" se $ runMaybeT $
+                        readHieFileFromDisk hie_loc
+                      case mhf of
+                        -- Uh oh, we failed to read the file for some reason, need to regenerate it
+                        Nothing -> regenerateHieFile
+                        -- can just re-index the file we read from disk
+                        Just hf -> liftIO $ do
+                          L.logInfo (logger se) $ "Re-indexing hie file for" <> T.pack (show (f,hash,fmap (HieDb.modInfoHash . HieDb.hieModInfo) mrow))
+                          indexHieFile se ms f hash hf
+                          return (fp, (diags <> diags_session, Just x))
+                -- Don't have a .hie file, must regenerate
+                else regenerateHieFile
 
 isHiFileStableRule :: Rules ()
 isHiFileStableRule = defineEarlyCutoff $ \IsHiFileStable f -> do

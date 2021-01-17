@@ -4469,7 +4469,7 @@ getReferences' (file, l, c) includeDeclaration = do
 
 referenceTestSession :: String -> FilePath -> [FilePath] -> (FilePath -> Session ()) -> TestTree
 referenceTestSession name thisDoc docs' f = testSessionWithExtraFiles "references" name $ \dir -> do
-  let docs = map (dir </>) $ delete thisDoc $ nub $ docs'
+  let docs = map (dir </>) $ delete thisDoc $ nubOrd docs'
   -- Initial Index
   docid <- openDoc thisDoc "haskell"
   let
@@ -4478,8 +4478,7 @@ referenceTestSession name thisDoc docs' f = testSessionWithExtraFiles "reference
       doc <- skipManyTill anyMessage $ satisfyMaybe $ \case
           NotCustomServer (NotificationMessage _ (CustomServerMethod "ghcide/reference/ready") fp) -> do
             A.Success fp' <- pure $ fromJSON fp
-            doc <- find (fp' ==) docs
-            pure doc
+            find (fp' ==) docs
           _ -> Nothing
       loop (delete doc docs)
   loop docs

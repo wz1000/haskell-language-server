@@ -72,7 +72,7 @@ computeTypeReferences = foldr (\ast m -> M.unionWith (++) (go ast) m) M.empty
         this = M.fromListWith (++)
           $ map (, [nodeSpan ast])
           $ concatMap namesInType
-          $ mapMaybe (\x -> guard (any (not . isOccurrence) (identInfo x)) *> identType x)
+          $ mapMaybe (\x -> guard (not $ all isOccurrence $ identInfo x) *> identType x)
           $ M.elems
           $ nodeIdentifiers $ nodeInfo ast
 

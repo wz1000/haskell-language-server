@@ -199,7 +199,7 @@ deltaFromDiff (T.lines -> old) (T.lines -> new) =
       | otherwise           = case V.unsafeIndex xs line of
           -1 ->
             -- look for the previous and next lines that mapped successfully
-            let !prev = 1 + (V.unsafeIndex prevs line)
+            let !prev = 1 + V.unsafeIndex prevs line
                 !next = V.unsafeIndex nexts line
               in PositionRange (Position prev 0) (Position next 0)
           line' -> PositionExact (Position line' col)
