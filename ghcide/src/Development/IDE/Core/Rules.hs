@@ -118,6 +118,7 @@ import Control.Concurrent.Async (concurrently)
 import Control.Monad.Reader
 import Control.Exception.Safe
 
+import Control.DeepSeq
 import Data.Coerce
 import Control.Monad.State
 import FastString (FastString(uniq))
@@ -815,7 +816,7 @@ getModIfaceFromDiskRule = defineEarlyCutoff $ \GetModIfaceFromDisk f -> do
                 -- This function is called if we need to regenerate and re-index the hie file for any reason
                 let regenerateHieFile = do
                       (diags', res) <- regenerateHiFile session f ms linkableType
-                      let fp = hiFileFingerPrint <$> res
+                      let !fp = hiFileFingerPrint <$!!> res
                       return (fp, (diags' <> diags_session, res))
 
                 if exists
@@ -841,7 +842,7 @@ getModIfaceFromDiskRule = defineEarlyCutoff $ \GetModIfaceFromDisk f -> do
                         Nothing -> regenerateHieFile
                         -- can just re-index the file we read from disk
                         Just hf -> liftIO $ do
-                          L.logInfo (logger se) $ "Re-indexing hie file for" <> T.pack (show (f,hash,fmap (HieDb.modInfoHash . HieDb.hieModInfo) mrow))
+                          L.logInfo (logger se) $ "Re-indexing hie file for" <> T.pack (show f)
                           indexHieFile se ms f hash hf
                           return (fp, (diags <> diags_session, Just x))
                 -- Don't have a .hie file, must regenerate

@@ -326,7 +326,6 @@ defRowToLocation lookupModule (row:.info) = do
   let start = Position (defSLine row - 1) (defSCol row - 1)
       end   = Position (defELine row - 1) (defECol row - 1)
       range = Range start end
---  traceM $ "DEFROW TO LOC ******************" ++ show (range, modInfoSrcFile info)
   file <- case modInfoSrcFile info of
     Just src -> pure $ toUri src
     Nothing -> lookupModule (defSrc row) (modInfoName info) (modInfoUnit info) (modInfoIsBoot info)
