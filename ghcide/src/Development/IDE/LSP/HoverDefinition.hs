@@ -66,7 +66,7 @@ setHandlersDocHighlight = PartialHandlers $ \WithMessage{..} x ->
 setHandlersReferences = PartialHandlers $ \WithMessage{..} x ->
   return x{LSP.referencesHandler = withResponse RspFindReferences $ const references}
 setHandlersWsSymbols = PartialHandlers $ \WithMessage{..} x ->
-  return x{LSP.workspaceSymbolHandler = withResponse _ $ const wsSymbols}
+  return x{LSP.workspaceSymbolHandler = (_ withResponse) RspWorkspaceSymbols $ const wsSymbols}
 
 -- | Respond to and log a hover or go-to-definition request
 request
