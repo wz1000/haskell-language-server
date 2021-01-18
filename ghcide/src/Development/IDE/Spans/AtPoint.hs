@@ -301,7 +301,7 @@ locationsAtPoint hiedb lookupModule _ideOptions imports pos ast =
       zeroPos = Position 0 0
       zeroRange = Range zeroPos zeroPos
       modToLocation m = fmap (\fs -> pure $ Location (fromNormalizedUri $ filePathToUri' fs) zeroRange) $ M.lookup m imports
-    in fmap concat $ mapMaybeM (either (pure . modToLocation) $ nameToLocation hiedb lookupModule) ns
+    in fmap (nubOrd . concat) $ mapMaybeM (either (pure . modToLocation) $ nameToLocation hiedb lookupModule) ns
 
 -- | Given a 'Name' attempt to find the location where it is defined.
 nameToLocation :: MonadIO m => HieDb -> LookupModule m -> Name -> m (Maybe [Location])
