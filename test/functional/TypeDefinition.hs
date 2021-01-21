@@ -21,7 +21,7 @@ tests = testGroup "type definitions" [
       testCase "finds local definition of sum type constructor"
         $ getTypeDefinitionTest' 23 7 17 0
     , testCase "finds non-local definition of type def"
-        $ getTypeDefinitionTest' 29 17 26 0
+        $ getTypeDefinitionTest' 29 19 26 0
     , testCase "find local definition of type def"
         $ getTypeDefinitionTest' 34 16 31 0
     , testCase "find type-definition of type def in component"
@@ -36,7 +36,7 @@ definitionsPath = "test/testdata/gototest"
 
 getTypeDefinitionTest :: SymbolLocation -> [SymbolLocation] -> Assertion
 getTypeDefinitionTest (symbolFile, symbolLine, symbolCol) definitionLocations =
-    failIfSessionTimeout . runSession hlsCommand fullCaps definitionsPath $ do
+    failIfSessionTimeout . runSession (hlsCommand ++ " --test") fullCaps definitionsPath $ do
         doc  <- openDoc symbolFile "haskell"
         defs <- getTypeDefinitions doc $ Position symbolLine symbolCol
         liftIO $ defs `expectSameLocations` map (first3 (definitionsPath </>)) definitionLocations
