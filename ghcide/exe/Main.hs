@@ -90,15 +90,8 @@ main = do
     dbLoc <- getHieDbLoc dir
 
     case argFilesOrCmd of
-      DbCmd cmd -> do
-        let opts :: Options
-            opts = Options
-              { database = dbLoc
-              , trace = False
-              , quiet = False
-              , virtualFile = False
-              }
-        runCommand libdir opts cmd
+      DbCmd opts cmd -> do
+        runCommand libdir opts{database = dbLoc} cmd
       Typecheck (Just -> argFilesOrCmd) | not argLSP -> runWithDb dbLoc $ runIde Arguments{..}
       _ -> let argFilesOrCmd = Nothing in runWithDb dbLoc $ runIde Arguments{..}
 

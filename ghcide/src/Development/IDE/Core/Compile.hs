@@ -522,7 +522,7 @@ indexHieFile se mod_summary srcPath hash hf = atomically $ do
             Just pendingHash -> pendingHash /= hash
         unless newerScheduled $ do
           tok <- pre
-          addRefsFromLoaded db targetPath (Just $ fromNormalizedFilePath srcPath) True hash hf
+          addRefsFromLoaded db targetPath (RealFile $ fromNormalizedFilePath srcPath) hash hf
           post tok
   where
     mod_location    = ms_location mod_summary

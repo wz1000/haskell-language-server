@@ -130,16 +130,25 @@ setInitialDynFlags = do
 -- by a worker thread using a dedicated database connection.
 -- This is done in order to serialize writes to the database, or else SQLite becomes unhappy
 runWithDb :: FilePath -> (HieDb -> IndexQueue -> IO ()) -> IO ()
-runWithDb fp k =
+runWithDb fp k = do
+  -- Delete the database if it has an incompatible schema version
+  withHieDb fp (const $ pure ())
+    `catch` \IncompatibleSchemaVersion{} -> removeFile fp
   withHieDb fp $ \writedb -> do
     initConn writedb
+    _ <- garbageCollectTypeNames writedb
     chan <- newTQueueIO
-    race_ (writerThread writedb chan) (withHieDb fp (flip k chan))
+    withAsync (writerThread writedb chan) $ \_ -> do
+      withHieDb fp (flip k chan)
   where
     writerThread db chan = forever $ do
       k <- atomically $ readTQueue chan
-      k db `catch` \e@SQLError{} -> do
-        hPutStrLn stderr $ "Error in worker, ignoring: " ++ show e
+      k db
+        `catch` \e@SQLError{} -> do
+          hPutStrLn stderr $ "SQLite error in worker, ignoring: " ++ show e
+        `catchAny` \e -> do
+          hPutStrLn stderr $ "Uncaught error in database worker, ignoring: " ++ show e
+
 
 getHieDbLoc :: FilePath -> IO FilePath
 getHieDbLoc dir = do

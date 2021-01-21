@@ -8,7 +8,7 @@ import HieDb.Run
 
 type Arguments = Arguments' IdeCmd
 
-data IdeCmd = Typecheck [FilePath] | DbCmd Command | LSP
+data IdeCmd = Typecheck [FilePath] | DbCmd Options Command | LSP
 
 data Arguments' a = Arguments
     {argLSP :: Bool
@@ -42,7 +42,7 @@ arguments = Arguments
       <*> option auto (short 'j' <> help "Number of threads (0: automatic)" <> metavar "NUM" <> value 0 <> showDefault)
       <*> switch (long "verbose" <> help "Include internal events in logging output")
       <*> ( hsubparser (command "typecheck" (info (Typecheck <$> fileCmd) fileInfo)
-                   <> command "hiedb" (info (DbCmd <$> cmdParser <**> helper) hieInfo)
+                   <> command "hiedb" (info (DbCmd <$> optParser "" True <*> cmdParser <**> helper) hieInfo)
                    <> command "lsp" (info (pure LSP <**> helper) lspInfo)  )
          <|> Typecheck <$> fileCmd )
   where
