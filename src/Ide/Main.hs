@@ -8,6 +8,7 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE NamedFieldPuns #-}
 
 module Ide.Main(defaultMain, runLspMode) where
 
@@ -94,9 +95,11 @@ hlsLogger = G.Logger $ \pri txt ->
 -- ---------------------------------------------------------------------
 
 runLspMode :: LspArguments -> IdePlugins IdeState -> IO ()
-runLspMode lspArgs idePlugins = do
+runLspMode lspArgs@LspArguments{argsCwd} idePlugins = do
+    whenJust argsCwd IO.setCurrentDirectory
     dir <- IO.getCurrentDirectory
     dbLoc <- getHieDbLoc dir
+    libdir <- setInitialDynFlags
     runWithDb dbLoc $ runLspMode' lspArgs idePlugins
 
 runLspMode' :: LspArguments -> IdePlugins IdeState -> HieDb -> IndexQueue -> IO ()
@@ -109,11 +112,7 @@ runLspMode' lspArgs@LspArguments{..} idePlugins hiedb hiechan = do
     let logger p = Logger $ \pri msg -> when (pri >= p) $ withLock lock $
             T.putStrLn $ T.pack ("[" ++ upper (show pri) ++ "] ") <> msg
 
-    whenJust argsCwd IO.setCurrentDirectory
-
     dir <- IO.getCurrentDirectory
-
-    libdir <- setInitialDynFlags
 
     pid <- T.pack . show <$> getProcessID
     let
