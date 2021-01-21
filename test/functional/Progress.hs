@@ -88,12 +88,13 @@ expectProgressReports = expectProgressReports' []
     expectProgressReports' [] [] = return ()
     expectProgressReports' tokens expectedTitles =
         do
+            liftIO $ print (tokens,expectedTitles)
             skipManyTill anyMessage (create <|> begin <|> progress <|> end)
             >>= \case
                 CreateM msg ->
                     expectProgressReports' (token msg : tokens) expectedTitles
                 BeginM msg -> do
-                    liftIO $ title msg `expectElem` expectedTitles
+                    liftIO $ title msg `expectElem` ("Indexing references from:":expectedTitles)
                     liftIO $ token msg `expectElem` tokens
                     expectProgressReports' tokens (delete (title msg) expectedTitles)
                 ProgressM msg -> do
