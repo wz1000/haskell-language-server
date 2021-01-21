@@ -103,8 +103,6 @@ runIde Arguments{..} hiedb hiechan = do
     let logger p = Logger $ \pri msg -> when (pri >= p) $ withLock lock $
             T.putStrLn $ T.pack ("[" ++ upper (show pri) ++ "] ") <> msg
 
-    whenJust argsCwd IO.setCurrentDirectory
-
     dir <- IO.getCurrentDirectory
 
     let hlsPlugins = pluginDescToIdePlugins $
