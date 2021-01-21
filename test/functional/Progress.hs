@@ -88,7 +88,6 @@ expectProgressReports = expectProgressReports' []
     expectProgressReports' [] [] = return ()
     expectProgressReports' tokens expectedTitles =
         do
-            liftIO $ print (tokens,expectedTitles)
             skipManyTill anyMessage (create <|> begin <|> progress <|> end)
             >>= \case
                 CreateM msg ->
