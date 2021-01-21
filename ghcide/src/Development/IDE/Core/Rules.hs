@@ -113,12 +113,11 @@ import Development.IDE.Core.IdeConfiguration
 import Development.IDE.Core.Service
 import Development.IDE.Core.Shake
 import Development.Shake.Classes hiding (get, put)
-import Control.Monad.Trans.Except (runExceptT)
+import Control.Monad.Trans.Except (runExceptT,ExceptT,except)
 import Control.Concurrent.Async (concurrently)
 import Control.Monad.Reader
 import Control.Exception.Safe
 
-import Control.DeepSeq
 import Data.Coerce
 import Control.Monad.State
 import FastString (FastString(uniq))
@@ -657,9 +656,9 @@ readHieFileForSrcFromDisk file = do
   row <- MaybeT $ liftIO $ HieDb.lookupHieFileFromSource db $ fromNormalizedFilePath file
   let hie_loc = HieDb.hieModuleHieFile row
   liftIO $ log $ "LOADING HIE FILE :" <> T.pack (show file)
-  readHieFileFromDisk hie_loc
+  exceptToMaybeT $ readHieFileFromDisk hie_loc
 
-readHieFileFromDisk :: FilePath -> MaybeT IdeAction HieFile
+readHieFileFromDisk :: FilePath -> ExceptT SomeException IdeAction HieFile
 readHieFileFromDisk hie_loc = do
   nc <- asks ideNc
   log <- asks $ L.logInfo . logger
@@ -667,7 +666,7 @@ readHieFileFromDisk hie_loc = do
   liftIO . log $ either (const $ "FAILED LOADING HIE FILE FOR:" <> T.pack (show hie_loc))
                         (const $ "SUCCEEDED LOADING HIE FILE FOR:" <> T.pack (show hie_loc))
                         res
-  MaybeT $ pure $ eitherToMaybe res
+  except res
 
 -- | Typechecks a module.
 typeCheckRule :: Rules ()
@@ -798,55 +797,50 @@ getModIfaceFromDiskRule = defineEarlyCutoff $ \GetModIfaceFromDisk f -> do
   (ms,_) <- use_ GetModSummary f
   (diags_session, mb_session) <- ghcSessionDepsDefinition f
   case mb_session of
-      Nothing -> return (Nothing, (diags_session, Nothing))
-      Just session -> do
-        sourceModified <- use_ IsHiFileStable f
-        linkableType <- getLinkableType f
-        r <- loadInterface (hscEnv session) ms sourceModified linkableType (regenerateHiFile session f ms)
-        case r of
-            (diags, Nothing) -> return (Nothing, (diags ++ diags_session, Nothing))
-            (diags, Just x) -> do
-                let !fp = Just $! hiFileFingerPrint x
+    Nothing -> return (Nothing, (diags_session, Nothing))
+    Just session -> do
+      sourceModified <- use_ IsHiFileStable f
+      linkableType <- getLinkableType f
+      r <- loadInterface (hscEnv session) ms sourceModified linkableType (regenerateHiFile session f ms)
+      case r of
+        (diags, Nothing) -> return (Nothing, (diags ++ diags_session, Nothing))
+        (diags, Just x) -> do
+          let !fp = Just $! hiFileFingerPrint x
+          return (fp, (diags <> diags_session, Just x))
 
-                -- Check state of hiedb - have we indexed the corresponding `.hie` file?
-                se@ShakeExtras{hiedb} <- getShakeExtras
-                let hie_loc = ml_hie_file $ ms_location ms
-                exists <- getFileExists $ toNormalizedFilePath' hie_loc
+-- | Check state of hiedb after loading an iface from disk - have we indexed the corresponding `.hie` file?
+getModIfaceFromDiskAndIndexRule :: Rules ()
+getModIfaceFromDiskAndIndexRule = defineEarlyCutoff $ \GetModIfaceFromDiskAndIndex f -> do
+  x <- use_ GetModIfaceFromDisk f
+  se@ShakeExtras{hiedb} <- getShakeExtras
 
-                -- This function is called if we need to regenerate and re-index the hie file for any reason
-                let regenerateHieFile = do
-                      (diags', res) <- regenerateHiFile session f ms linkableType
-                      let !fp = hiFileFingerPrint <$!!> res
-                      return (fp, (diags' <> diags_session, res))
+  -- GetModIfaceFromDisk should have written a `.hie` file, must check if it matches version in db
+  let ms = hirModSummary x
+      hie_loc = ml_hie_file $ ms_location ms
+  hash <- liftIO $ getFileHash hie_loc
+  mrow <- liftIO $ HieDb.lookupHieFileFromSource hiedb (fromNormalizedFilePath f)
+  case mrow of
+    Just row
+      | hash == HieDb.modInfoHash (HieDb.hieModInfo row)
+      , hie_loc == HieDb.hieModuleHieFile row  -> do
+      -- All good, the db has indexed the file
+      when (coerce $ ideTesting se) $
+        liftIO $ eventer se $ LSP.NotCustomServer $
+          LSP.NotificationMessage "2.0" (LSP.CustomServerMethod "ghcide/reference/ready") (toJSON $ fromNormalizedFilePath f)
+    -- Not in db, must re-index
+    _ -> do
+      ehf <- liftIO $ runIdeAction "GetModIfaceFromDiskAndIndex" se $ runExceptT $
+        readHieFileFromDisk hie_loc
+      case ehf of
+        -- Uh oh, we failed to read the file for some reason, need to regenerate it
+        Left err -> fail $ "failed to read .hie file " ++ show hie_loc ++ ": " ++ displayException err
+        -- can just re-index the file we read from disk
+        Right hf -> liftIO $ do
+          L.logInfo (logger se) $ "Re-indexing hie file for" <> T.pack (show f)
+          indexHieFile se ms f hash hf
 
-                if exists
-                then do
-                  -- Have a hie file, must check if it matches version in db
-                  hash <- liftIO $ getFileHash hie_loc
-                  mrow <- liftIO $ HieDb.lookupHieFileFromSource hiedb (fromNormalizedFilePath f)
-                  case mrow of
-                    -- All good, the db has indexed the file
-                    Just row
-                      | hash == HieDb.modInfoHash (HieDb.hieModInfo row)
-                      , hie_loc == HieDb.hieModuleHieFile row  -> do
-                      when (coerce $ ideTesting se) $
-                        liftIO $ eventer se $ LSP.NotCustomServer $
-                          LSP.NotificationMessage "2.0" (LSP.CustomServerMethod "ghcide/reference/ready") (toJSON $ fromNormalizedFilePath f)
-                      return (fp, (diags <> diags_session, Just x))
-                    -- Not in db, must re-index
-                    _ -> do
-                      mhf <- liftIO $ runIdeAction "GetModIfaceFromDisk" se $ runMaybeT $
-                        readHieFileFromDisk hie_loc
-                      case mhf of
-                        -- Uh oh, we failed to read the file for some reason, need to regenerate it
-                        Nothing -> regenerateHieFile
-                        -- can just re-index the file we read from disk
-                        Just hf -> liftIO $ do
-                          L.logInfo (logger se) $ "Re-indexing hie file for" <> T.pack (show f)
-                          indexHieFile se ms f hash hf
-                          return (fp, (diags <> diags_session, Just x))
-                -- Don't have a .hie file, must regenerate
-                else regenerateHieFile
+  let fp = hiFileFingerPrint x
+  return (Just fp, ([], Just x))
 
 isHiFileStableRule :: Rules ()
 isHiFileStableRule = defineEarlyCutoff $ \IsHiFileStable f -> do
@@ -946,7 +940,7 @@ getModIfaceRule = defineEarlyCutoff $ \GetModIface f -> do
         _ -> pure []
       return (fp, (diags++hiDiags, hiFile))
     NotFOI -> do
-      hiFile <- use GetModIfaceFromDisk f
+      hiFile <- use GetModIfaceFromDiskAndIndex f
       let fp = hiFileFingerPrint <$> hiFile
       return (fp, ([], hiFile))
 
@@ -1113,6 +1107,7 @@ mainRule = do
     getDocMapRule
     loadGhcSession
     getModIfaceFromDiskRule
+    getModIfaceFromDiskAndIndexRule
     getModIfaceRule
     getModIfaceWithoutLinkableRule
     getModSummaryRule

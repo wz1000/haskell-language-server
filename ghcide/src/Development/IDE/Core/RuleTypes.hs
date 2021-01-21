@@ -235,6 +235,10 @@ type instance RuleResult ReportImportCycles = ()
 --   This is an internal rule, use 'GetModIface' instead.
 type instance RuleResult GetModIfaceFromDisk = HiFileResult
 
+-- | GetModIfaceFromDisk and index the `.hie` file into the database.
+--   This is an internal rule, use 'GetModIface' instead.
+type instance RuleResult GetModIfaceFromDiskAndIndex = HiFileResult
+
 -- | Get a module interface details, either from an interface file or a typechecked module
 type instance RuleResult GetModIface = HiFileResult
 
@@ -404,6 +408,12 @@ data GetModIfaceFromDisk = GetModIfaceFromDisk
 instance Hashable GetModIfaceFromDisk
 instance NFData   GetModIfaceFromDisk
 instance Binary   GetModIfaceFromDisk
+
+data GetModIfaceFromDiskAndIndex = GetModIfaceFromDiskAndIndex
+    deriving (Eq, Show, Typeable, Generic)
+instance Hashable GetModIfaceFromDiskAndIndex
+instance NFData   GetModIfaceFromDiskAndIndex
+instance Binary   GetModIfaceFromDiskAndIndex
 
 data GetModIface = GetModIface
     deriving (Eq, Show, Typeable, Generic)
