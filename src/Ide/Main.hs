@@ -99,7 +99,7 @@ runLspMode lspArgs@LspArguments{argsCwd} idePlugins = do
     whenJust argsCwd IO.setCurrentDirectory
     dir <- IO.getCurrentDirectory
     dbLoc <- getHieDbLoc dir
-    libdir <- setInitialDynFlags
+    _libdir <- setInitialDynFlags
     runWithDb dbLoc $ runLspMode' lspArgs idePlugins
 
 runLspMode' :: LspArguments -> IdePlugins IdeState -> HieDb -> IndexQueue -> IO ()
