@@ -116,7 +116,7 @@ setInitialDynFlags = do
   libdir <- case libDirRes of
       CradleSuccess libdir -> pure $ LibDir libdir
       CradleFail err -> do
-        hPutStrLn stderr $ "Couldn't load cradle for libdir: " ++ show err
+        hPutStrLn stderr $ "Couldn't load cradle for libdir: " ++ show (err,dir,hieYaml,cradle)
         exitWith $ ExitFailure 1
       CradleNone -> do
         hPutStrLn stderr $ "Couldn't load cradle (CradleNone)"
