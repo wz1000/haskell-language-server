@@ -781,17 +781,8 @@ ghcSessionDepsDefinition file = do
         res <- liftIO $ newHscEnvEqWithImportPaths (envImportPaths env) session' []
         return ([], Just res)
 
-
--- This function is also responsible for ensuring database consistency
--- Whenever we read a `.hi` file, we must check to ensure we have also
--- indexed the corresponding `.hie` file. If this is not the case (for example,
--- `ghcide` could be killed before indexing finishes), we must re-index the
--- `.hie` file. Most of the time, there should be an up2date `.hie` file on
--- disk since we are careful to write out the `.hie` file before writing the
--- `.hi` file
--- If we don't have a `.hie` or `.hi` file, the `regenerateHiFile` function is
--- responsible for generating both a fresh `hi` and `hie` file, and queueing up
--- a index operation for the `.hie` file.
+-- | Load a iface from disk, or generate it if there isn't one or it is out of date
+-- This rule also ensures that the `.hie` and `.o` (if needed) files are written out.
 getModIfaceFromDiskRule :: Rules ()
 getModIfaceFromDiskRule = defineEarlyCutoff $ \GetModIfaceFromDisk f -> do
   (ms,_) <- use_ GetModSummary f
@@ -809,6 +800,13 @@ getModIfaceFromDiskRule = defineEarlyCutoff $ \GetModIfaceFromDisk f -> do
           return (fp, (diags <> diags_session, Just x))
 
 -- | Check state of hiedb after loading an iface from disk - have we indexed the corresponding `.hie` file?
+-- This function is responsible for ensuring database consistency
+-- Whenever we read a `.hi` file, we must check to ensure we have also
+-- indexed the corresponding `.hie` file. If this is not the case (for example,
+-- `ghcide` could be killed before indexing finishes), we must re-index the
+-- `.hie` file. There should be an up2date `.hie` file on
+-- disk since we are careful to write out the `.hie` file before writing the
+-- `.hi` file
 getModIfaceFromDiskAndIndexRule :: Rules ()
 getModIfaceFromDiskAndIndexRule = defineEarlyCutoff $ \GetModIfaceFromDiskAndIndex f -> do
   x <- use_ GetModIfaceFromDisk f
