@@ -47,7 +47,7 @@ library
         deepseq,
         directory,
         dlist,
-        extra,
+        extra >= 1.7.4,
         fuzzy,
         filepath,
         fingertree,
