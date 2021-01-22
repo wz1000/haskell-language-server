@@ -99,7 +99,6 @@ runLspMode lspArgs@LspArguments{argsCwd} idePlugins = do
     whenJust argsCwd IO.setCurrentDirectory
     dir <- IO.getCurrentDirectory
     dbLoc <- getHieDbLoc dir
-    _libdir <- setInitialDynFlags
     runWithDb dbLoc $ runLspMode' lspArgs idePlugins
 
 runLspMode' :: LspArguments -> IdePlugins IdeState -> HieDb -> IndexQueue -> IO ()
@@ -130,6 +129,7 @@ runLspMode' lspArgs@LspArguments{..} idePlugins hiedb hiechan = do
         hPutStrLn stderr "If you are seeing this in a terminal, you probably should have run ghcide WITHOUT the --lsp option!"
 
         runLanguageServer options (pluginHandler plugins) getInitialConfig getConfigFromNotification $ \getLspId event vfs caps wProg wIndefProg _getConfig _rootPath -> do
+            _libdir <- setInitialDynFlags
             t <- t
             hPutStrLn stderr $ "Started LSP server in " ++ showDuration t
             sessionLoader <- loadSession dir
@@ -149,6 +149,8 @@ runLspMode' lspArgs@LspArguments{..} idePlugins hiedb hiechan = do
         -- GHC produces messages with UTF8 in them, so make sure the terminal doesn't error
         hSetEncoding stdout utf8
         hSetEncoding stderr utf8
+
+        _libdir <- setInitialDynFlags
 
         putStrLn $ "(haskell-language-server)Ghcide setup tester in " ++ dir ++ "."
         putStrLn "Report bugs at https://github.com/haskell/haskell-language-server/issues"
