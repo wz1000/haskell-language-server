@@ -14,6 +14,7 @@ module Ide.Main(defaultMain, runLspMode) where
 
 import Control.Concurrent.Extra
 import Control.Monad.Extra
+import Control.Exception.Safe
 import Data.Default
 import Data.List.Extra
 import qualified Data.Map.Strict as Map
@@ -133,6 +134,7 @@ runLspMode' lspArgs@LspArguments{..} idePlugins hiedb hiechan = do
             hPutStrLn stderr $ "Started LSP server in " ++ showDuration t
 
             _libdir <- setInitialDynFlags
+                          `catchAny` (\e -> (hPutStrLn stderr $ "setInitialDynFlags: " ++ displayException e) >> pure Nothing)
             sessionLoader <- loadSession dir
             -- config <- fromMaybe defaultLspConfig <$> getConfig
             let options = defOptions

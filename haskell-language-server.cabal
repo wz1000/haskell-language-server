@@ -75,6 +75,7 @@ library
     , optparse-simple
     , process
     , shake
+    , safe-exceptions
     , sqlite-simple
     , unordered-containers
 

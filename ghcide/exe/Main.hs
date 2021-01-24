@@ -8,6 +8,7 @@ module Main(main) where
 import Arguments
 import Control.Concurrent.Extra
 import Control.Monad.Extra
+import Control.Exception.Safe
 import Control.Lens ( (^.) )
 import Data.Default
 import Data.List.Extra
@@ -140,6 +141,7 @@ runIde Arguments{..} hiedb hiechan = do
             -- We do it here since haskell-lsp changes our working directory to the correct place ('rootPath')
             -- before calling this function
             _mlibdir <- setInitialDynFlags
+                          `catchAny` (\e -> (hPutStrLn stderr $ "setInitialDynFlags: " ++ displayException e) >> pure Nothing)
 
             sessionLoader <- loadSession $ fromMaybe dir rootPath
             config <- fromMaybe def <$> getConfig

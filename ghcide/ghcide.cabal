@@ -279,6 +279,7 @@ executable ghcide
         extra,
         filepath,
         gitrev,
+        safe-exceptions,
         ghc,
         hashable,
         haskell-lsp,
