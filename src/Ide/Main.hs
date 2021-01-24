@@ -54,6 +54,7 @@ import System.IO
 import qualified System.Log.Logger as L
 import System.Time.Extra
 import Development.Shake (ShakeOptions (shakeThreads), action)
+import HieDb.Run
 
 ghcIdePlugins :: T.Text -> IdePlugins IdeState -> (Plugin Config, [T.Text])
 ghcIdePlugins pid ps = (asGhcIdePlugin ps, allLspCmdIds' pid ps)
@@ -76,6 +77,16 @@ defaultMain args idePlugins = do
 
         VersionMode PrintNumericVersion ->
             putStrLn haskellLanguageServerNumericVersion
+
+        DbCmd opts cmd -> do
+          dir <- IO.getCurrentDirectory
+          dbLoc <- getHieDbLoc dir
+          hPutStrLn stderr $ "Using hiedb at: " ++ dbLoc
+          mlibdir <- setInitialDynFlags
+          case mlibdir of
+            Nothing -> exitWith $ ExitFailure 1
+            Just libdir ->
+              runCommand libdir opts{database = dbLoc} cmd
 
         LspMode lspArgs -> do
             {- see WARNING above -}
