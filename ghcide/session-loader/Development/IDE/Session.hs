@@ -66,7 +66,6 @@ import qualified System.Directory.Extra as IO
 import System.FilePath
 import System.Info
 import System.IO
-import System.Exit
 
 import GHCi
 import HscTypes (ic_dflags, hsc_IC, hsc_dflags, hsc_NC)
@@ -107,22 +106,22 @@ defaultLoadingOptions = SessionLoadingOptions
     }
 
 -- | Sets `unsafeGlobalDynFlags` on using the hie-bios cradle and returns the GHC libdir
-setInitialDynFlags :: IO LibDir
+setInitialDynFlags :: IO (Maybe LibDir)
 setInitialDynFlags = do
   dir <- IO.getCurrentDirectory
   hieYaml <- runMaybeT $ yamlConfig dir
   cradle <- maybe (HieBios.loadImplicitCradle $ addTrailingPathSeparator dir) HieBios.loadCradle hieYaml
   libDirRes <- getRuntimeGhcLibDir cradle
   libdir <- case libDirRes of
-      CradleSuccess libdir -> pure $ LibDir libdir
+      CradleSuccess libdir -> pure $ Just $ LibDir libdir
       CradleFail err -> do
         hPutStrLn stderr $ "Couldn't load cradle for libdir: " ++ show (err,dir,hieYaml,cradle)
-        exitWith $ ExitFailure 1
+        pure Nothing
       CradleNone -> do
         hPutStrLn stderr $ "Couldn't load cradle (CradleNone)"
-        exitWith $ ExitFailure 1
-  dynFlags <- dynFlagsForPrinting libdir
-  setUnsafeGlobalDynFlags dynFlags
+        pure Nothing
+  dynFlags <- mapM dynFlagsForPrinting libdir
+  mapM_ setUnsafeGlobalDynFlags dynFlags
   pure libdir
 
 -- | Wraps `withHieDb` to provide a database connection for reading, and a `HieWriterChan` for

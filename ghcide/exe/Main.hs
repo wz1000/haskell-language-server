@@ -82,16 +82,17 @@ main = do
 
     whenJust argsCwd IO.setCurrentDirectory
 
-    -- We want to set the global DynFlags right now, so that we can use
-    -- `unsafeGlobalDynFlags` even before the project is configured
-    libdir <- setInitialDynFlags
 
     dir <- IO.getCurrentDirectory
     dbLoc <- getHieDbLoc dir
 
     case argFilesOrCmd of
       DbCmd opts cmd -> do
-        runCommand libdir opts{database = dbLoc} cmd
+        mlibdir <- setInitialDynFlags
+        case mlibdir of
+          Nothing -> exitWith $ ExitFailure 1
+          Just libdir ->
+            runCommand libdir opts{database = dbLoc} cmd
       Typecheck (Just -> argFilesOrCmd) | not argLSP -> runWithDb dbLoc $ runIde Arguments{..}
       _ -> let argFilesOrCmd = Nothing in runWithDb dbLoc $ runIde Arguments{..}
 
@@ -133,6 +134,13 @@ runIde Arguments{..} hiedb hiechan = do
         runLanguageServer options (pluginHandler plugins) onInitialConfiguration onConfigurationChange $ \getLspId event vfs caps wProg wIndefProg getConfig rootPath -> do
             t <- t
             hPutStrLn stderr $ "Started LSP server in " ++ showDuration t
+
+            -- We want to set the global DynFlags right now, so that we can use
+            -- `unsafeGlobalDynFlags` even before the project is configured
+            -- We do it here since haskell-lsp changes our working directory to the correct place ('rootPath')
+            -- before calling this function
+            _mlibdir <- setInitialDynFlags
+
             sessionLoader <- loadSession $ fromMaybe dir rootPath
             config <- fromMaybe def <$> getConfig
             let options = defOptions
