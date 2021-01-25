@@ -55,8 +55,8 @@ foundHover :: (Maybe Range, [T.Text]) -> Maybe Hover
 foundHover (mbRange, contents) =
   Just $ Hover (HoverContents $ MarkupContent MkMarkdown $ T.intercalate sectionSeparator contents) mbRange
 
-setHandlersDefinition, setHandlersTypeDefinition, setHandlersDocHighlight :: PartialHandlers c
-  , setHandlersReferences, setHandlersWsSymbols :: PartialHandlers c
+setHandlersDefinition, setHandlersTypeDefinition, setHandlersDocHighlight,
+  setHandlersReferences, setHandlersWsSymbols :: PartialHandlers c
 setHandlersDefinition = PartialHandlers $ \WithMessage{..} x ->
   return x{LSP.definitionHandler = withResponse RspDefinition $ const gotoDefinition}
 setHandlersTypeDefinition = PartialHandlers $ \WithMessage{..} x ->
