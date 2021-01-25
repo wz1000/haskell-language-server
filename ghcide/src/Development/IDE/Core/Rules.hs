@@ -135,6 +135,7 @@ import GHC.IO.Encoding
 import Data.ByteString.Encoding as T
 
 import qualified HieDb
+import System.IO
 
 -- | This is useful for rules to convert rules that can only produce errors or
 -- a result into the more general IdeResult type that supports producing
@@ -588,6 +589,7 @@ getHieAstRuleDefinition f hsc tmr = do
   se <- getShakeExtras
 
   isFoi <- use_ IsFileOfInterest f
+  liftIO $ hPutStrLn stderr $ "GetHIE AST isFOI" ++ show (f,isFoi)
   diagsWrite <- case isFoi of
     IsFOI Modified -> do
       when (coerce $ ideTesting se) $
@@ -601,6 +603,7 @@ getHieAstRuleDefinition f hsc tmr = do
           liftIO $ writeAndIndexHieFile hsc se msum f exports asts source
     _ -> pure []
 
+  liftIO $ hPutStrLn stderr $ "GetHIE AST done" ++ show f
   let refmap = generateReferencesMap . getAsts <$> masts
       typemap = AtPoint.computeTypeReferences . getAsts <$> masts
   pure (diags <> diagsWrite, HAR (ms_mod $ tmrModSummary tmr) <$> masts <*> refmap <*> typemap <*> pure HieFresh)

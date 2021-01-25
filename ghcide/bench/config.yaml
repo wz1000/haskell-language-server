@@ -12,11 +12,11 @@ outputFolder: bench-results
 # or a local project (path) with a valid `hie.yaml` file
 examples:
   # Medium-sized project without TH
-  - name: Cabal
-    version: 3.0.0.0
-    modules:
-        - Distribution/Simple.hs
-        - Distribution/Types/Module.hs
+  # - name: Cabal
+  #   version: 3.0.0.0
+  #   modules:
+  #       - Distribution/Simple.hs
+  #       - Distribution/Types/Module.hs
   # Small-sized project with TH
   - name: lsp-types
     version: 1.0.0.1
@@ -26,15 +26,15 @@ examples:
 
 # The set of experiments to execute
 experiments:
-    - "edit"
-    - "hover"
+    # - "edit"
+    # - "hover"
     - "hover after edit"
-    - "getDefinition"
-    - "getDefinition after edit"
-    - "completions after edit"
-    - "code actions"
-    - "code actions after edit"
-    - "documentSymbols after edit"
+    # - "getDefinition"
+    # - "getDefinition after edit"
+    # - "completions after edit"
+    # - "code actions"
+    # - "code actions after edit"
+    # - "documentSymbols after edit"
 
 # An ordered list of versions to analyze
 versions:
@@ -60,5 +60,5 @@ versions:
 # - v0.6.0
 # - v0.7.0
 # - v0.7.1
-- upstream: origin/master
+# - upstream: origin/master
 - HEAD

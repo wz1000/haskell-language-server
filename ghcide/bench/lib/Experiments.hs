@@ -32,6 +32,7 @@ import Development.IDE.Plugin.Test
 import Experiments.Types
 import Language.Haskell.LSP.Test
 import Language.Haskell.LSP.Types
+import Language.Haskell.LSP.Messages
 import Language.Haskell.LSP.Types.Capabilities
 import Numeric.Natural
 import Options.Applicative
@@ -72,8 +73,10 @@ experiments =
         return True,
       ---------------------------------------------------------------------------------------
       bench "hover after edit" 10 $ \docs -> do
+        liftIO . putStrLn $ "SENDING EDIT ################################"
         forM_ docs $ \DocumentPositions{..} ->
           changeDoc doc [charEdit stringLiteralP]
+        liftIO . putStrLn $ "SENDING Hover ################################"
         flip allWithIdentifierPos docs $ \DocumentPositions{..} ->
           isJust <$> getHover doc (fromJust identifierP),
       ---------------------------------------------------------------------------------------
@@ -300,16 +303,16 @@ runBenchmarksFun dir allBenchmarks = do
           ++ concat
             [ ["--shake-profiling", path] | Just path <- [shakeProfiling ?config]
             ]
-          ++ ["--verbose" | verbose ?config]
+          ++ ["--verbose" ]
           ++ ["--ot-memory-profiling" | Just _ <- [otMemoryProfiling ?config]]
     lspTestCaps =
       fullCaps {_window = Just $ WindowClientCapabilities $ Just True}
     conf =
       defaultConfig
-        { logStdErr = verbose ?config,
+        { logStdErr = True,
           logMessages = verbose ?config,
           logColor = False,
-          messageTimeout = timeoutLsp ?config
+          messageTimeout = 50000000
         }
 
 data BenchRun = BenchRun
@@ -331,8 +334,9 @@ waitForProgressDone = loop
   where
     loop = do
       void (skipManyTill anyMessage message :: Session WorkDoneProgressEndNotification)
-      done <- null <$> getIncompleteProgressSessions
-      if done
+      incomp <- getIncompleteProgressSessions
+      liftIO $ putStrLn $ show ("INCOMPLETE &&&&&&&&&&&&&&&&&&", incomp)
+      if null incomp
       then pure ()
       else do loop
 
@@ -362,12 +366,23 @@ runBench runSess b = handleAny (\e -> print e >> return badRun)
           loop !userWaits !delayedWork n = do
             (t, res) <- duration $ experiment docs
             if not res
-              then return Nothing
+              then do
+                output "****************** Failed"
+                return Nothing
             else do
                 output (showDuration t)
                 -- Wait for the delayed actions to finish
+                liftIO . putStrLn $ "################ SENDING WaitForShakeQueue"
                 waitId <- sendRequest (CustomClientMethod "test") WaitForShakeQueue
-                (td, resp) <- duration $ skipManyTill anyMessage $ responseForId waitId
+                liftIO . putStrLn $ "################ SENT WaitForShakeQueue"
+                (td, resp) <- duration $ skipManyTill (liftIO (putStrLn "anyMessage") *> anyMessage) $ do
+                    liftIO $ putStrLn $ show ("responseForId", waitId)
+                    m <- satisfyMaybe $ \msg -> case msg of
+                      RspCustomServer rsp@ResponseMessage{_id} | _id == responseId waitId -> Just rsp
+                      _ -> Nothing
+                    liftIO $ putStrLn $ show ("responseForId", waitId, m)
+                    pure m
+                liftIO . putStrLn $ show ("WAIT FOR ID ##########################", waitId, resp)
                 case resp of
                     ResponseMessage{_result=Right Null} -> do
                       loop (userWaits+t) (delayedWork+td) (n -1)

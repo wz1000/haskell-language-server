@@ -832,7 +832,7 @@ useWithStaleFast' key file = do
 
   -- Async trigger the key to be built anyway because we want to
   -- keep updating the value in the key.
-  wait <- delayedAction $ mkDelayedAction ("C:" ++ show key) Debug $ use key file
+  wait <- delayedAction $ mkDelayedAction ("C:" ++ show key ++ ":" ++ show file) Debug $ use key file
 
   s@ShakeExtras{state} <- askShake
   r <- liftIO $ getValues state key file

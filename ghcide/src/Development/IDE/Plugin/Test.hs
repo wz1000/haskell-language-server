@@ -9,6 +9,7 @@ module Development.IDE.Plugin.Test
   , blockCommandId
   ) where
 
+import System.IO
 import Control.Monad.STM
 import Data.Aeson
 import Data.Aeson.Types
@@ -37,6 +38,7 @@ import Development.IDE.Types.Location (fromUri)
 import Control.Concurrent (threadDelay)
 import Ide.Types
 import qualified Language.Haskell.LSP.Core as LSP
+import GHC.Conc
 
 data TestRequest
     = BlockSeconds Seconds           -- ^ :: Null
@@ -84,9 +86,15 @@ requestHandler _ s GetShakeSessionQueueCount = do
     n <- atomically $ countQueue $ actionQueue $ shakeExtras s
     return $ Right (toJSON n)
 requestHandler _ s WaitForShakeQueue = do
+    n <- atomically $ peekInProgress $ actionQueue $ shakeExtras s
+    hPutStrLn stderr $ "GOT WAIT FOR SHAKE QUEUE ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^" ++ show (map actionName n)
     atomically $ do
         n <- countQueue $ actionQueue $ shakeExtras s
-        when (n>0) retry
+        when (n>0) $ do
+          que <- peekInProgress $ actionQueue $ shakeExtras s
+          unsafeIOToSTM $ hPutStrLn stderr $ "RETRY ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^" ++ show (map actionName que)
+          retry
+    hPutStrLn stderr "RESPONED TO WAIT FOR SHAKE QUEUE ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"
     return $ Right Null
 requestHandler _ s (WaitForIdeRule k file) = do
     let nfp = fromUri $ toNormalizedUri file
