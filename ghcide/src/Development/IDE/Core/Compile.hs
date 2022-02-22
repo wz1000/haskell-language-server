@@ -136,6 +136,7 @@ import qualified Language.LSP.Types                as LSP
 import           Unsafe.Coerce
 import Data.Time.Clock.POSIX (posixSecondsToUTCTime, utcTimeToPOSIXSeconds)
 import Debug.Trace
+import Outputable (ppr, pprTraceM)
 
 import GHC.Serialized
 import qualified Data.Binary                                  as B
@@ -225,6 +226,8 @@ captureSplicesAndDeps env k = do
 
              {- Tidy it (temporary, until coreSat does cloning) -}
            ; let tidy_expr = tidyExpr emptyTidyEnv simpl_expr
+
+           ; pprTraceM "compile core" (ppr tidy_expr)
 
              {- Prepare for codegen -}
            ; prepd_expr <- corePrepExpr dflags hsc_env tidy_expr
@@ -1173,7 +1176,7 @@ loadInterface session ms linkableNeeded RecompilationInfo{..} = do
                   BCOLinkable -> liftIO $ do
                     core <- readBinCoreFile namecache_updater core_file
                     pure (UpToDate, Just $ CoreLinkable (posixSecondsToUTCTime t) core)
-                else pure (RecompBecause msg', Nothing)
+                else pure (RecompBecause "missing [out of date]", Nothing)
               Just (VFSVersion _) -> pure (RecompBecause msg', Nothing)
            where
              msg' = case linkableType of
