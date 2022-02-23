@@ -38,6 +38,7 @@ import BinIface
 import HscTypes
 import IdInfo
 import Var
+import Unique
 #endif
 
 import Outputable
@@ -177,7 +178,8 @@ writeBinCoreFile core_path fat_iface = do
     writeBinMem bh core_path
 
 codeGutsToCoreFile :: CgGuts -> CoreFile
-codeGutsToCoreFile CgGuts{..} = uncurry CoreFile $ fmap concat $ unzip $ map (toIfaceTopBind cg_module) cg_binds
+codeGutsToCoreFile CgGuts{..} = pprTrace "codeGutsToCoreFile" (ppr cg_binds) $
+  uncurry CoreFile $ fmap concat $ unzip $ map (toIfaceTopBind cg_module) cg_binds
 
 toIfaceTopBndr :: Module -> Id -> IfaceId
 toIfaceTopBndr mod id
@@ -204,10 +206,10 @@ typecheckCoreFile this_mod type_var (CoreFile prepd_binding dets) = do
 mangleDeclName :: Module -> Name -> Name
 mangleDeclName mod name
   | isExternalName name = name
-  | otherwise = mkExternalName (nameUnique name) (mangleModule mod) (nameOccName name) (nameSrcSpan name)
+  | otherwise = mkExternalName (nameUnique name) (mangleModule (nameUnique name) mod) (nameOccName name) (nameSrcSpan name)
 
-mangleModule :: Module -> Module
-mangleModule mod = mkModule (moduleUnitId mod) (mkModuleName $ "GHCIDEINTERNAL" ++ moduleNameString (moduleName mod))
+mangleModule :: Unique -> Module -> Module
+mangleModule uniq mod = mkModule (moduleUnitId mod) (mkModuleName $ "GHCIDEINTERNAL" ++ moduleNameString (moduleName mod) ++ show (getKey uniq))
 
 isGhcideModule :: Module -> Bool
 isGhcideModule mod = "GHCIDEINTERNAL" `isPrefixOf` (moduleNameString $ moduleName mod)
@@ -222,7 +224,9 @@ tcTopIfaceBindings ty_var de ver_decls
      int <- mapM (traverse $ tcIfaceId de) ver_decls
      let all_ids = concatMap toList int
      liftIO $ modifyIORef ty_var (flip extendTypeEnvList $ map AnId all_ids)
-     extendIfaceIdEnv all_ids $ mapM tc_iface_bindings int
+     xs <- extendIfaceIdEnv all_ids $ mapM tc_iface_bindings int
+     pprTraceM "READ Iface" (ppr xs)
+     pure xs
 
 tcIfaceId :: DetailsEnv -> IfaceId -> IfL Id
 tcIfaceId de ifn = fmap getIfaceId . tcIfaceDecl False =<< unmangle_decl_name ifn
